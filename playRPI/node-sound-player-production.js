@@ -74,49 +74,6 @@ const server = app.listen(port, () => {
   console.log(`server is running at ${port}`);
 });
 
-//////////////////////////////////////////////////fs function deleting from dislikes
-function deletingTrackFromTXT(trackName) {
-  const currentPlaylistConfig = getCurrentPlaylistConfig();
-  if (!currentPlaylistConfig) return;
-  
-  const pathToFile = currentPlaylistConfig.file;
-  
-  let lines = fs.readFileSync(pathToFile, 'utf8')
-    .split(/\r?\n/)
-    .filter(line => line.trim() !== '' && line.trim() !== trackName.trim());
-
-  fs.writeFileSync(pathToFile, lines.join('\n'), 'utf8');
-  console.log(`DISLIKE from ${currentPlaylistConfig.name.toUpperCase()} playlist`);
-}
-
-// Helper function to get current playlist configuration
-function getCurrentPlaylistConfig() {
-  const currentHour = new Date().getHours();
-  
-  for (const playlist of playlistConfig.playlists) {
-    if (isHourInRange(currentHour, playlist.startHour, playlist.endHour)) {
-      return playlist;
-    }
-  }
-  return null;
-}
-
-// Helper function to get current playlist name
-function getCurrentPlaylistName() {
-  const config = getCurrentPlaylistConfig();
-  return config ? config.name : 'unknown';
-}
-
-// Helper function to check if hour is within range (handles midnight rollover)
-function isHourInRange(hour, startHour, endHour) {
-  if (startHour <= endHour) {
-    // Same day range (e.g., 15-18)
-    return hour >= startHour && hour < endHour;
-  } else {
-    // Crosses midnight (e.g., 22-2)
-    return hour >= startHour || hour < endHour;
-  }
-}
 
 /////////////////////////////////////////////////player
 function checkingOnReboot() {
@@ -161,34 +118,7 @@ function playerInitialization() {
   playSong();
 }     
 
-function loadNextTrack() {
-  // Check if playlist should change
-  const activePlaylistConfig = getCurrentPlaylistConfig();
-  
-  if (!activePlaylistConfig) {
-    console.log("No active playlist - stopping");
-    process.exit(0);
-    return;
-  }
 
-  const newPlaylist = allPlaylists[activePlaylistConfig.name];
-  
-  // If playlist changed, switch and reset index
-  if (newPlaylist !== currentPlaylist) {
-    console.log(`Switching to ${activePlaylistConfig.name} playlist`);
-    currentPlaylist = newPlaylist;
-    i = 0;
-  } else {
-    // Continue with current playlist
-    if (i >= currentPlaylist.length - 1) {
-        i = 0;
-    } else {
-        i += 1;
-    }
-  }
-
-  playSong();
-}
       
 function playSong () {
   if (!currentPlaylist || currentPlaylist.length === 0) {
@@ -217,6 +147,38 @@ function playSong () {
   });
 }
 
+function loadNextTrack() {
+  // Check if playlist should change
+  const activePlaylistConfig = getCurrentPlaylistConfig();
+
+  if (!activePlaylistConfig) {
+    console.log("No active playlist - stopping");
+    process.exit(0);
+    return;
+  }
+
+  const newPlaylist = allPlaylists[activePlaylistConfig.name];
+
+  // If playlist changed, switch and reset index
+  if (newPlaylist !== currentPlaylist) {
+    console.log(`Switching to ${activePlaylistConfig.name} playlist`);
+    currentPlaylist = newPlaylist;
+    i = 0;
+  } else {
+    // Continue with current playlist
+    if (i >= currentPlaylist.length - 1) {
+      i = 0;
+    } else {
+      i += 1;
+    }
+  }
+
+  playSong();
+}
+
+// helper functions
+// (functions that don't modify app's state)
+// (also one of those functions modifies one file)
 function parseTracksList (data) {
   if (!fs.existsSync(data)) {
     console.log(`Playlist file not found: ${data}`);
@@ -247,4 +209,48 @@ function shuffle(array) {
   }
 
   return array;
+}
+
+//////////////////////////////////////////////////fs function deleting from dislikes
+function deletingTrackFromTXT(trackName) {
+  const currentPlaylistConfig = getCurrentPlaylistConfig();
+  if (!currentPlaylistConfig) return;
+
+  const pathToFile = currentPlaylistConfig.file;
+
+  let lines = fs.readFileSync(pathToFile, 'utf8')
+      .split(/\r?\n/)
+      .filter(line => line.trim() !== '' && line.trim() !== trackName.trim());
+
+  fs.writeFileSync(pathToFile, lines.join('\n'), 'utf8');
+  console.log(`DISLIKE from ${currentPlaylistConfig.name.toUpperCase()} playlist`);
+}
+
+// Helper function to get current playlist configuration
+function getCurrentPlaylistConfig() {
+  const currentHour = new Date().getHours();
+
+  for (const playlist of playlistConfig.playlists) {
+    if (isHourInRange(currentHour, playlist.startHour, playlist.endHour)) {
+      return playlist;
+    }
+  }
+  return null;
+}
+
+// Helper function to get current playlist name
+function getCurrentPlaylistName() {
+  const config = getCurrentPlaylistConfig();
+  return config ? config.name : 'unknown';
+}
+
+// Helper function to check if hour is within range (handles midnight rollover)
+function isHourInRange(hour, startHour, endHour) {
+  if (startHour <= endHour) {
+    // Same day range (e.g., 15-18)
+    return hour >= startHour && hour < endHour;
+  } else {
+    // Crosses midnight (e.g., 22-2)
+    return hour >= startHour || hour < endHour;
+  }
 }
