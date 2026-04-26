@@ -178,7 +178,6 @@ function loadNextTrack() {
 
 // helper functions
 // (functions that don't modify app's state)
-// (also one of those functions modifies one file)
 function parseTracksList (data) {
   if (!fs.existsSync(data)) {
     console.log(`Playlist file not found: ${data}`);
@@ -189,7 +188,8 @@ function parseTracksList (data) {
   
   for (var j = 0; j < arrayList.length; j++) {
     if (arrayList[j].trim() !== '') {
-      arrayList[j] = "/home/spherepi-peremena/sphere/playRPI/music/" + arrayList[j];
+      arrayList[j] = path.resolve(__dirname, 'music',  arrayList[j]);
+      // arrayList[j] = "/home/spherepi-peremena/sphere/playRPI/music/" + arrayList[j];
     }
   }
   
