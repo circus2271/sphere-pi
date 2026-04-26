@@ -14,7 +14,6 @@ var i = 0;
 var currentPlaylist, allPlaylists = {}, currentTrackName, currentTrackPath, player;
 
 
-
 var options = {
     gain: 0,
     debug: false,
@@ -31,10 +30,12 @@ app.use(express.urlencoded({ extended: true }));
 ////////////////////////////////////////////////////server
 app.post("/request", (req, res) => {
       if (req.body.value == 'like') {
+        scheduleLikeDislike({newStatus: 'Like'})
         console.log("if like condition occured");
       } else if (req.body.value == 'dislike') {
+        scheduleLikeDislike({newStatus: 'Dislike'})
         console.log("if dislike condition occured");
-        deletingTrackFromTXT(currentTrackName);
+        // deletingTrackFromTXT(currentTrackName);
       } else if (req.body.value == 'volumeDown') {
           if (volume == 0) {
             res.send("min");
@@ -137,6 +138,22 @@ function playSong () {
 
   player.play();
   player.once('complete', function(){
+    const stats = collectStats();
+
+    if (likeDislikeStatus.scheduled) {
+      if (likeDislikeStatus.newStatus === 'Dislike') {
+        deletingTrackFromTXT(currentTrackName);
+      }
+
+      // use here the same object, although it may be not the best name for it
+      sendLikeDislike(stats)
+      resetLikeDislikeScheduledValues()
+    }
+
+    // to hopefully bypass airtable's 5 requests per second limit
+    setTimeout(() => {
+      sendSongStats(stats)
+    }, 2000)
     loadNextTrack();
   });
 
@@ -146,6 +163,56 @@ function playSong () {
     loadNextTrack(); // Skip to next track on error
   });
 }
+
+function sendLikeDislike(status) {
+  // fetch()
+}
+//
+function collectStats() {
+  const timestamp =  new Date().toLocaleString('ru-RU')
+
+  const data = {
+    "baseId": playlistConfig.baseId,
+    "trackName": currentTrackName,
+    "Played at": timestamp,
+    "Index in a playlist":i,
+    "Playlist name":getCurrentPlaylistName(),
+    "newStatus": likeDislikeStatus.newStatus
+  }
+
+  return data
+}
+
+async function sendSongStats(data) {
+  try {
+    const updateSongStatsApiEndpoint = 'https://pi-stats-1025869845226.europe-west1.run.app/'
+
+    const response = await fetch(updateSongStatsApiEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    })
+
+    console.log(1.1)
+    const text = await response
+    console.log(1.)
+    console.log(text)
+
+    return text
+
+  } catch (error) {
+    console.log(11)
+  }
+}
+
+
+
+
+//       sendSongStats()
+
+
 
 function loadNextTrack() {
   // Check if playlist should change
@@ -252,5 +319,32 @@ function isHourInRange(hour, startHour, endHour) {
   } else {
     // Crosses midnight (e.g., 22-2)
     return hour >= startHour || hour < endHour;
+  }
+}
+
+// like dislike status
+
+let likeDislikeStatus = {
+  scheduled: false,
+  newStatus: null
+}
+
+// parse an object parameter and get its newStatus key
+const scheduleLikeDislike = ({ newStatus }) => {
+  // make sure first letter is capitalized
+  const firstLetter = newStatus[0].toUpperCase()
+  const status = firstLetter + newStatus.toLowerCase().slice(1)
+
+  likeDislikeStatus = {
+    scheduled: true,
+    newStatus: status
+  }
+}
+
+const resetLikeDislikeScheduledValues = () => {
+  // clean up
+  likeDislikeStatus = {
+    scheduled: false,
+    newStatus: null
   }
 }
