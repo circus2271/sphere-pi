@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 
 const playlistConfig = require('./_playlistConfig');
 
@@ -89,7 +90,7 @@ function collectStats(currentTrackName, likeDislikeService) {
         'trackName': currentTrackName,
         'Played at': timestamp,
         'Index in a playlist':i,
-        'Playlist name':getCurrentPlaylistName(),
+        'Playlist name': getCurrentPlaylistName(),
     }
 
     if (likeDislikeService.scheduled) {
@@ -144,8 +145,8 @@ module.exports = {
     shuffle,
     deletingTrackFromTXT,
     getCurrentPlaylistConfig,
-    getCurrentPlaylistName,
-    isHourInRange,
+    // getCurrentPlaylistName,
+    // isHourInRange,
     collectStats,
     sendLikeDislike,
     sendSongStats

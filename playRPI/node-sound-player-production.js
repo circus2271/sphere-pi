@@ -5,7 +5,7 @@ const loudness = require('mwl-loudness');
 var volume = 0;
 const playlistConfig = require('./_playlistConfig')
 const likeDislikeService = require('./_likeDislikeService')
-const {parseTracksList, shuffle, getCurrentPlaylistConfig, collectStats, deletingTrackFromTXT, sendLikeDislike, sendSongStats} = require('_helpers')
+const {parseTracksList, shuffle, getCurrentPlaylistConfig, collectStats, deletingTrackFromTXT, sendLikeDislike, sendSongStats} = require('./_helpers')
 ///////////modules for server
 const express = require('express')
 const path = require('path');
