@@ -4,7 +4,8 @@ var soundplayer = require('sound-player');
 const loudness = require('mwl-loudness');
 var volume = 0;
 const playlistConfig = require('./_playlistConfig')
-
+const likeDislikeService = require('./_likeDislikeService')
+const {parseTracksList, shuffle, getCurrentPlaylistConfig, collectStats, deletingTrackFromTXT, sendLikeDislike, sendSongStats} = require('_helpers')
 ///////////modules for server
 const express = require('express')
 const path = require('path');
@@ -30,10 +31,10 @@ app.use(express.urlencoded({ extended: true }));
 ////////////////////////////////////////////////////server
 app.post('/request', (req, res) => {
       if (req.body.value == 'like') {
-        scheduleLikeDislike({newStatus: 'Like'})
+        likeDislikeService.scheduleLikeDislike({newStatus: 'Like'})
         console.log('if like condition occured');
       } else if (req.body.value == 'dislike') {
-        scheduleLikeDislike({newStatus: 'Dislike'})
+        likeDislikeService.scheduleLikeDislike({newStatus: 'Dislike'})
         console.log('if dislike condition occured');
         // deletingTrackFromTXT(currentTrackName);
       } else if (req.body.value == 'volumeDown') {
@@ -119,8 +120,6 @@ function playerInitialization() {
   playSong();
 }     
 
-
-      
 function playSong () {
   if (!currentPlaylist || currentPlaylist.length === 0) {
     console.log('No tracks in current playlist');

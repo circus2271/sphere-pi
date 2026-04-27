@@ -1,7 +1,7 @@
 const path = require("path");
 
 // FLEXIBLE PLAYLIST CONFIGURATION - Easy to modify!
-const _playlistConfig = {
+const playlistConfig = {
     // For 2 playlists (current setup):
     //playlists: [
     //  { name: 'day', file: '/home/spherepi-peremena/sphere/playRPI/tracksDay.txt', startHour: 15, endHour: 16 },
@@ -27,4 +27,4 @@ const _playlistConfig = {
     baseId: ''
 };
 
-module.exports = _playlistConfig
+module.exports = playlistConfig
