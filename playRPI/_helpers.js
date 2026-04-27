@@ -82,14 +82,14 @@ function isHourInRange(hour, startHour, endHour) {
     }
 }
 
-function collectStats(currentTrackName, likeDislikeService) {
+function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
     const timestamp =  new Date().toLocaleString('ru-RU')
 
     const data = {
         'baseId': playlistConfig.baseId,
         'trackName': currentTrackName,
         'Played at': timestamp,
-        'Index in a playlist':i,
+        'Index in a playlist': currentTrackIndex,
         'Playlist name': getCurrentPlaylistName(),
     }
 

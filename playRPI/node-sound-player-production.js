@@ -137,7 +137,7 @@ function playSong () {
 
   player.play();
   player.once('complete', function(){
-    const stats = collectStats();
+    const stats = collectStats(currentTrackName, likeDislikeService, i);
 
     if (stats.newStatus) {
       if (stats.newStatus === 'Dislike') {
