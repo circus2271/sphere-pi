@@ -10,6 +10,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "mwl-loudness": "^0.3.0",
     "sound-player": "^1.0.13"

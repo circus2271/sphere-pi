@@ -1,4 +1,7 @@
 const path = require("path");
+require('dotenv').config()
+
+const { BASE_ID, TABLE_ID } = process.env
 
 // FLEXIBLE PLAYLIST CONFIGURATION - Easy to modify!
 const playlistConfig = {
@@ -23,7 +26,8 @@ const playlistConfig = {
 
     stopHour: 2,
     startHour: 9,
-    baseId: ''
+    baseId: BASE_ID,
+    tableId: TABLE_ID
 };
 
 module.exports = playlistConfig

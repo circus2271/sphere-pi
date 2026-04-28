@@ -87,6 +87,7 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
 
     const data = {
         'baseId': playlistConfig.baseId,
+        'tableId': playlistConfig.tableId,
         'trackName': currentTrackName,
         'Played at': timestamp,
         'Index in a playlist': currentTrackIndex,
