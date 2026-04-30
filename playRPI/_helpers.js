@@ -5,6 +5,65 @@ const playlistConfig = require('./_playlistConfig');
 
 // helper functions
 // (functions that don't modify app's state)
+function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
+    const timestamp =  new Date().toLocaleString('ru-RU')
+
+    const data = {
+        'baseId': playlistConfig.baseId,
+        'tableId': getCurrentPlaylistTableId(),
+        'trackName': currentTrackName,
+        'Played at': timestamp,
+        'Index in a playlist': currentTrackIndex,
+        'Playlist name': getCurrentPlaylistName(),
+    }
+
+    if (likeDislikeService.scheduled) {
+        data['newStatus'] = likeDislikeService.newStatus
+    }
+
+    return data
+}
+
+const basePath = 'https://europe-central2-sphere-385104.cloudfunctions.net'
+const updateRecordApiEndpoint = `${basePath}/updateRecordStatus`
+const updateSongStatsApiEndpoint = `${basePath}/updateSongStats`
+
+const sendLikeDislike = async data => {
+
+    try {
+
+        const response = await send(updateRecordApiEndpoint, data)
+
+        return response.json()
+
+    } catch (error) {
+        console.log(error)
+    }
+}
+
+const sendSongStats = async data => {
+
+    try {
+
+        const response = await send(updateSongStatsApiEndpoint, data)
+
+        return response.text()
+
+    } catch (error) {
+        console.log(error)
+    }
+}
+
+function send(url, data) {
+    return fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+}
+
 function parseTracksList (data) {
     if (!fs.existsSync(data)) {
         console.log(`Playlist file not found: ${data}`);
@@ -71,6 +130,12 @@ function getCurrentPlaylistName() {
     return config ? config.name : 'unknown';
 }
 
+function getCurrentPlaylistTableId() {
+    const config = getCurrentPlaylistConfig();
+    // return config ? config.tableId : 'unknown';
+    return config.tableId;
+}
+
 // Helper function to check if hour is within range (handles midnight rollover)
 function isHourInRange(hour, startHour, endHour) {
     if (startHour <= endHour) {
@@ -80,65 +145,6 @@ function isHourInRange(hour, startHour, endHour) {
         // Crosses midnight (e.g., 22-2)
         return hour >= startHour || hour < endHour;
     }
-}
-
-function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
-    const timestamp =  new Date().toLocaleString('ru-RU')
-
-    const data = {
-        'baseId': playlistConfig.baseId,
-        'tableId': playlistConfig.tableId,
-        'trackName': currentTrackName,
-        'Played at': timestamp,
-        'Index in a playlist': currentTrackIndex,
-        'Playlist name': getCurrentPlaylistName(),
-    }
-
-    if (likeDislikeService.scheduled) {
-        data['newStatus'] = likeDislikeService.newStatus
-    }
-
-    return data
-}
-
-const basePath = 'https://europe-central2-sphere-385104.cloudfunctions.net'
-const updateRecordApiEndpoint = `${basePath}/updateRecordStatus`
-const updateSongStatsApiEndpoint = `${basePath}/updateSongStats`
-
-const sendLikeDislike = async data => {
-
-    try {
-
-        const response = await send(updateRecordApiEndpoint, data)
-
-        return response.json()
-
-    } catch (error) {
-        console.log(error)
-    }
-}
-
-const sendSongStats = async data => {
-
-    try {
-
-        const response = await send(updateSongStatsApiEndpoint, data)
-
-        return response.text()
-
-    } catch (error) {
-        console.log(error)
-    }
-}
-
-function send(url, data) {
-    return fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-    })
 }
 
 module.exports = {
