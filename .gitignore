@@ -4,3 +4,4 @@ node_modules
 */music/*.mp3
 */music/*.mp3.part
 _playlistConfig.js
+downloadedTracks.txt

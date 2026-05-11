@@ -2,7 +2,7 @@
 var fs = require('fs');
 var soundplayer = require('sound-player');
 const loudness = require('mwl-loudness');
-var volume = 0;
+var volume = 80;
 const playlistConfig = require('./_playlistConfig')
 const likeDislikeService = require('./_likeDislikeService')
 const {parseTracksList, shuffle, getCurrentPlaylistConfig, collectStats, deletingTrackFromTXT, sendLikeDislike, sendSongStats} = require('./_helpers')
@@ -145,13 +145,22 @@ function playSong () {
       }
 
       // use here the same object, although it may be not the best name for it
-      sendLikeDislike(stats)
+      try {
+        sendLikeDislike(stats)
+      } catch(error) {
+        console.error(error)
+      }
+
       likeDislikeService.resetLikeDislikeScheduledValues()
     }
 
     // to hopefully bypass airtable's 5 requests per second limit
     setTimeout(() => {
-      sendSongStats(stats)
+      try {
+        sendSongStats(stats)
+      } catch(error) {
+        console.error(error)
+      }
     }, 2000)
     loadNextTrack();
   });
