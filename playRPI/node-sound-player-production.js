@@ -138,10 +138,12 @@ function playSong () {
   player.play();
   player.once('complete', async function(){
     const stats = collectStats(currentTrackName, likeDislikeService, i);
+    loadNextTrack();
 
+    // send those stats ang handle results
     if (stats.newStatus) {
       if (stats.newStatus === 'Dislike') {
-        deletingTrackFromTXT(currentTrackName);
+        deletingTrackFromTXT(stats['songName']);
       }
 
       // use here the same object, although it may be not the best name for it
@@ -164,7 +166,6 @@ function playSong () {
         console.error(error)
       }
     }, 2000)
-    loadNextTrack();
   });
 
   player.once('error', function(err) {
