@@ -136,7 +136,7 @@ function playSong () {
   player = new soundplayer(options);
 
   player.play();
-  player.once('complete', function(){
+  player.once('complete', async function(){
     const stats = collectStats(currentTrackName, likeDislikeService, i);
 
     if (stats.newStatus) {
@@ -146,7 +146,7 @@ function playSong () {
 
       // use here the same object, although it may be not the best name for it
       try {
-        const result = sendLikeDislike(stats)
+        const result = await sendLikeDislike(stats)
         console.log(result)
       } catch(error) {
         console.error(error)
@@ -156,9 +156,9 @@ function playSong () {
     }
 
     // to hopefully bypass airtable's 5 requests per second limit
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
-        const result = sendSongStats(stats);
+        const result = await sendSongStats(stats);
         console.log(result)
       } catch(error) {
         console.error(error)
