@@ -30,12 +30,15 @@ app.use(express.urlencoded({ extended: true }));
 
 ////////////////////////////////////////////////////server
 app.post('/request', (req, res) => {
-      if (req.body.value == 'like') {
+      console.log('request')
+      if (req.body.value === 'like') {
         likeDislikeService.scheduleLikeDislike({newStatus: 'Like'})
         console.log('if like condition occured');
-      } else if (req.body.value == 'dislike') {
+        return res.send('like scheduled')
+      } else if (req.body.value === 'dislike') {
         likeDislikeService.scheduleLikeDislike({newStatus: 'Dislike'})
         console.log('if dislike condition occured');
+        return res.send('dislike scheduled')
         // deletingTrackFromTXT(currentTrackName);
       } else if (req.body.value == 'volumeDown') {
           if (volume == 0) {
