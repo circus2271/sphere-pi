@@ -146,7 +146,8 @@ function playSong () {
 
       // use here the same object, although it may be not the best name for it
       try {
-        sendLikeDislike(stats)
+        const result = sendLikeDislike(stats)
+        console.log(result)
       } catch(error) {
         console.error(error)
       }
@@ -157,7 +158,8 @@ function playSong () {
     // to hopefully bypass airtable's 5 requests per second limit
     setTimeout(() => {
       try {
-        sendSongStats(stats)
+        const result = sendSongStats(stats);
+        console.log(result)
       } catch(error) {
         console.error(error)
       }
