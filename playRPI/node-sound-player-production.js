@@ -137,13 +137,15 @@ function playSong () {
 
   player.play();
   player.once('complete', async function(){
-    const stats = collectStats(currentTrackName, likeDislikeService, i);
+    const currentSongFullName = currentTrackName;
+    const songNameWithoutExtension = currentSongFullName.replace('.mp3', '');
+    const stats = collectStats(songNameWithoutExtension, likeDislikeService, i);
     loadNextTrack();
 
     // send those stats ang handle results
     if (stats.newStatus) {
       if (stats.newStatus === 'Dislike') {
-        deletingTrackFromTXT(stats['songName']);
+        deletingTrackFromTXT(currentSongFullName);
       }
 
       // use here the same object, although it may be not the best name for it

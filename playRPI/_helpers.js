@@ -21,6 +21,8 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
         data['newStatus'] = likeDislikeService.newStatus
     }
 
+    console.log('data', data)
+
     return data
 }
 
@@ -34,7 +36,7 @@ const sendLikeDislike = async data => {
 
         const response = await send(updateRecordApiEndpoint, data)
 
-        return response.json()
+        return await response.json()
 
     } catch (error) {
         console.log(error)
@@ -47,7 +49,7 @@ const sendSongStats = async data => {
 
         const response = await send(updateSongStatsApiEndpoint, data)
 
-        return response.text()
+        return await response.text()
 
     } catch (error) {
         console.log(error)
