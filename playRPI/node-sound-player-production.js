@@ -152,7 +152,7 @@ function playSong () {
 
     // send those stats ang handle results
     if (stats.newStatus) {
-      console.log(`${currentSongFullName} song will be ${stata.newStatus.toLowerCase()}d`) // liked or disliked
+      console.log(`${currentSongFullName} song will be ${stats.newStatus.toLowerCase()}d`) // liked or disliked
       if (stats.newStatus === 'Dislike') {
         deletingTrackFromTXT(currentSongFullName);
       }
