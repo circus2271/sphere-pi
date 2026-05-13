@@ -33,12 +33,14 @@ app.post('/request', (req, res) => {
       console.log('request')
       if (req.body.value === 'like') {
         likeDislikeService.scheduleLikeDislike({newStatus: 'Like'})
-        console.log('if like condition occured');
-        return res.send('like scheduled')
+        console.log(`songName: ${currentTrackName}`)
+        console.log('like scheduled');
+        return res.json({currentTrackName, message: 'like scheduled'})
       } else if (req.body.value === 'dislike') {
         likeDislikeService.scheduleLikeDislike({newStatus: 'Dislike'})
-        console.log('if dislike condition occured');
-        return res.send('dislike scheduled')
+        console.log(`songName: ${currentTrackName}`)
+        console.log('dislike scheduled');
+        return res.json({currentTrackName, message: 'dislike scheduled'})
         // deletingTrackFromTXT(currentTrackName);
       } else if (req.body.value == 'volumeDown') {
           if (volume == 0) {
@@ -143,10 +145,14 @@ function playSong () {
     const currentSongFullName = currentTrackName;
     const songNameWithoutExtension = currentSongFullName.replace('.mp3', '');
     const stats = collectStats(songNameWithoutExtension, likeDislikeService, i);
+    // clean up so next track could be liked or disliked
+    likeDislikeService.resetLikeDislikeScheduledValues()
+
     loadNextTrack();
 
     // send those stats ang handle results
     if (stats.newStatus) {
+      console.log(`${currentSongFullName} song will be ${stata.newStatus.toLowerCase()}d`) // liked or disliked
       if (stats.newStatus === 'Dislike') {
         deletingTrackFromTXT(currentSongFullName);
       }
@@ -155,11 +161,12 @@ function playSong () {
       try {
         const result = await sendLikeDislike(stats)
         console.log(result)
+        console.log(`${stats.newStatus} is sent`)
       } catch(error) {
         console.error(error)
       }
 
-      likeDislikeService.resetLikeDislikeScheduledValues()
+      //likeDislikeService.resetLikeDislikeScheduledValues()
     }
 
     // to hopefully bypass airtable's 5 requests per second limit
