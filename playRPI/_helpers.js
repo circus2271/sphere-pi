@@ -100,18 +100,17 @@ function shuffle(array) {
 }
 
 //////////////////////////////////////////////////fs function deleting from dislikes
-function deletingTrackFromTXT(trackName) {
-    const currentPlaylistConfig = getCurrentPlaylistConfig();
-    if (!currentPlaylistConfig) return;
+function deletingTrackFromTXT(trackName, currentPlaylistFileName) {
 
-    const pathToFile = currentPlaylistConfig.file;
+    // it's the same (as currentPlaylistFileName stores an entire path)
+    // let's keep it like that to lower a complexity
+    const pathToFile = currentPlaylistFileName;
 
     let lines = fs.readFileSync(pathToFile, 'utf8')
         .split(/\r?\n/)
         .filter(line => line.trim() !== '' && line.trim() !== trackName.trim());
 
     fs.writeFileSync(pathToFile, lines.join('\n'), 'utf8');
-    console.log(`DISLIKE from ${currentPlaylistConfig.name.toUpperCase()} playlist`);
 }
 
 // Helper function to get current playlist configuration

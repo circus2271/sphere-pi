@@ -12,7 +12,7 @@ const path = require('path');
 
 ////////////variables for player
 var i = 0;
-var currentPlaylist, allPlaylists = {}, currentTrackName, player;
+var currentPlaylist, allPlaylists = {}, currentTrackName, player, activePlaylistConfig;
 
 
 var options = {
@@ -88,10 +88,10 @@ function checkingOnReboot() {
   const currentHour = currentTime.getHours();
   
   // Check if we're in any playlist time range
-  const activePlaylist = getCurrentPlaylistConfig();
+  activePlaylistConfig = getCurrentPlaylistConfig();
   
-  if (activePlaylist) {
-    console.log(`Music time - ${activePlaylist.name} playlist active`);
+  if (activePlaylistConfig) {
+    console.log(`Music time - ${activePlaylistConfig.name} playlist active`);
     playerInitialization();
   } else { 
     console.log('Not music time - stopping');
@@ -115,12 +115,9 @@ function playerInitialization() {
     shuffle(allPlaylists[playlistConf.name]);
   });
 
-  // Set current playlist based on time
-  const activePlaylistConfig = getCurrentPlaylistConfig();
-  if (activePlaylistConfig) {
-    currentPlaylist = allPlaylists[activePlaylistConfig.name];
-    console.log(`Active playlist: ${activePlaylistConfig.name}`);
-  }
+  // Set current playlist
+  currentPlaylist = allPlaylists[activePlaylistConfig.name];
+
 
   playSong();
 }     
@@ -130,7 +127,9 @@ function playSong () {
     console.log('No tracks in current playlist');
     return;
   }
-
+  
+  console.log(`Active playlist: ${activePlaylistConfig.name}`);
+  
   options.filename = currentPlaylist[i];
   currentTrackName = currentPlaylist[i].split('music/')[1];
   
@@ -140,11 +139,12 @@ function playSong () {
 
   player = new soundplayer(options);
 
-  player.play();
+  player.play();  
   player.once('complete', async function(){
     const currentSongFullName = currentTrackName;
     const songNameWithoutExtension = currentSongFullName.replace('.mp3', '');
     const stats = collectStats(songNameWithoutExtension, likeDislikeService, i);
+    const currentPlaylistFileName = activePlaylistConfig.file // stores an entire path
     // clean up so next track could be liked or disliked
     likeDislikeService.resetLikeDislikeScheduledValues()
 
@@ -154,7 +154,7 @@ function playSong () {
     if (stats.newStatus) {
       console.log(`${currentSongFullName} song will be ${stats.newStatus.toLowerCase()}d`) // liked or disliked
       if (stats.newStatus === 'Dislike') {
-        deletingTrackFromTXT(currentSongFullName);
+        deletingTrackFromTXT(currentSongFullName, currentPlaylistFileName);
       }
 
       // use here the same object, although it may be not the best name for it
@@ -165,8 +165,6 @@ function playSong () {
       } catch(error) {
         console.error(error)
       }
-
-      //likeDislikeService.resetLikeDislikeScheduledValues()
     }
 
     // to hopefully bypass airtable's 5 requests per second limit
@@ -189,8 +187,8 @@ function playSong () {
 
 function loadNextTrack() {
   // Check if playlist should change
-  const activePlaylistConfig = getCurrentPlaylistConfig();
-
+  activePlaylistConfig = getCurrentPlaylistConfig();
+  
   if (!activePlaylistConfig) {
     console.log('No active playlist - stopping');
     process.exit(0);
