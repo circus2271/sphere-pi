@@ -14,7 +14,7 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
         'songName': currentTrackName,
         'Played at': timestamp,
         'Index in a playlist': currentTrackIndex,
-        'Playlist name': getCurrentPlaylistName(),
+        'playlistName': getCurrentPlaylistName(),
     }
 
     if (likeDislikeService.scheduled) {
