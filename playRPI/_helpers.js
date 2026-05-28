@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const playlistConfig = require('./_playlistConfig');
 
@@ -15,6 +16,7 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
         timestamp,
         currentIndex: currentTrackIndex,
         playlistName: getCurrentPlaylistName(),
+        deviceUniqueId: os.hostname(),
     }
 
     if (likeDislikeService.scheduled) {
