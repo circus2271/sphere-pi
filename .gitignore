@@ -5,3 +5,7 @@ node_modules
 */music/*.mp3.part
 _playlistConfig.js
 downloadedTracks.txt
+tracksAllDay.txt
+tracksNight.txt
+tracksToDownload.txt
+tracksMorning.txt
