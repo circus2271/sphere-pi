@@ -12,9 +12,9 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
         'baseId': playlistConfig.baseId,
         'tableId': getCurrentPlaylistTableId(),
         'songName': currentTrackName,
-        'Played at': timestamp,
-        'Index in a playlist': currentTrackIndex,
-        'playlistName': getCurrentPlaylistName(),
+        timestamp,
+        currentIndex: currentTrackIndex,
+        playlistName: getCurrentPlaylistName(),
     }
 
     if (likeDislikeService.scheduled) {
