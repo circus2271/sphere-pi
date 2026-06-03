@@ -6,6 +6,7 @@ var volume = 80;
 const playlistConfig = require('./_playlistConfig')
 const likeDislikeService = require('./_likeDislikeService')
 const {parseTracksList, shuffle, getCurrentPlaylistConfig, collectStats, deletingTrackFromTXT, sendLikeDislike, sendSongStats} = require('./_helpers')
+const { syncAllPlaylists } = require('./_airtableSync')
 ///////////modules for server
 const express = require('express')
 const path = require('path');
@@ -100,7 +101,16 @@ function checkingOnReboot() {
   }
 }
 
-checkingOnReboot();
+async function checkingOnRebootWithSync() {
+  try {
+    await syncAllPlaylists(playlistConfig);
+  } catch (err) {
+    console.error('Airtable sync failed, continuing with existing local tracks:', err.message);
+  }
+  checkingOnReboot();
+}
+
+checkingOnRebootWithSync();
 
 function playerInitialization() {
   console.log('playerInitialization called');
