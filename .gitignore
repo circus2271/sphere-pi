@@ -1,9 +1,10 @@
+
 node_modules
 .env
 .idea
 */music/*.mp3
 */music/*.mp3.part
-_playlistConfig.js
+_playerConfig.js
 downloadedTracks.txt
 tracksAllDay.txt
 tracksNight.txt

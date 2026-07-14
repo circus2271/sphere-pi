@@ -8,7 +8,7 @@
  *   - sound-player   → no mpg123 process is spawned
  *   - mwl-loudness   → no amixer/ALSA calls
  *   - node-fetch     → no cloud function calls
- *   - _playlistConfig → points at a temp playlist created by the test
+ *   - _playerConfig → points at a temp playlist created by the test
  *
  * Environment variables provided by the test:
  *   TEST_PLAYLIST_FILE — path to a temp tracks .txt file
@@ -48,7 +48,7 @@ registerMock('node-fetch', async () => ({
 // --- playlist config fake ----------------------------------------------------
 // One playlist covering the whole day (new HH:MM format), no daySchedule —
 // so the player boots whatever the wall clock says when the tests run.
-registerMock('_playlistConfig', {
+registerMock('_playerConfig', {
   baseId: 'base-INTEGRATION',
   playlists: [
     {
@@ -60,6 +60,7 @@ registerMock('_playlistConfig', {
     },
   ],
   mode24h: false,
+  volume: 76,
   reshuffleAt: null,
   recentGuard: 30,
 });

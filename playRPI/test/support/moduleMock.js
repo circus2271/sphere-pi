@@ -5,7 +5,7 @@
  *
  * Why: the app depends on hardware/network modules (sound-player spawns
  * mpg123, mwl-loudness shells out to amixer, node-fetch hits the cloud,
- * _playlistConfig.js is gitignored and machine-specific). None of those can
+ * _playerConfig.js is gitignored and machine-specific). None of those can
  * run in a test environment, so we intercept require() calls for them and
  * return controllable fakes instead.
  *
@@ -13,7 +13,7 @@
  *
  *   const { registerMock } = require('./support/moduleMock');
  *   registerMock('node-fetch', myFakeFetch);
- *   registerMock('_playlistConfig', myFakeConfig); // matches by suffix too
+ *   registerMock('_playerConfig', myFakeConfig); // matches by suffix too
  *   const helpers = require('../_helpers');
  */
 
@@ -27,7 +27,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (mocks.has(request)) {
     return mocks.get(request);
   }
-  // Suffix match for relative/local modules (e.g. './_playlistConfig')
+  // Suffix match for relative/local modules (e.g. './_playerConfig')
   const normalized = request.replace(/\.js$/, '');
   for (const [name, value] of mocks) {
     if (normalized === name || normalized.endsWith('/' + name)) {

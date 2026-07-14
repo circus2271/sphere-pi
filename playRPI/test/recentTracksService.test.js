@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { registerMock } = require('./support/moduleMock');
-registerMock('_playlistConfig', { playlists: [], recentGuard: 5 });
+registerMock('_playerConfig', { playlists: [], recentGuard: 5 });
 registerMock('node-fetch', async () => ({ json: async () => ({}), text: async () => '' }));
 
 const { RecentTracksService } = require('../_recentTracksService');

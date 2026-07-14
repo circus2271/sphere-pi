@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const fetch = require('node-fetch')
-const playlistConfig = require('./_playlistConfig');
+const playerConfig = require('./_playerConfig');
 const { log, warn, pad } = require('./_logger');
 
 // helper functions
@@ -71,7 +71,7 @@ function getPlaylistWindow(playlist) {
 
 // ─────────────────────────────────────────────
 //  SESSION LOGIC (расписание дней недели, минутная точность)
-//  daySchedule живёт в _playlistConfig.js:
+//  daySchedule живёт в _playerConfig.js:
 //    { 0: { start: '08:55', stop: '23:55' }, 1: {...}, ... }
 //  Day numbers: 0=Sun, 1=Mon, ..., 6=Sat
 //  stop > "24:00" — сессия заканчивается после полуночи.
@@ -84,7 +84,7 @@ function getPlaylistWindow(playlist) {
 // baseDate — полночь тех суток, к которым сессия ПРИНАДЛЕЖИТ
 // (для сессии Пт, играющей в 01:15 Сб, baseDate = полночь пятницы).
 function getActiveSession(now, schedule) {
-    schedule = schedule || playlistConfig.daySchedule;
+    schedule = schedule || playerConfig.daySchedule;
     if (!schedule) return null;
 
     const nowMin = getNowMinutes(now);
@@ -133,7 +133,7 @@ function computeSessionStopDate(session) {
 // время уже прошло (или совпадает с текущим) — переносим на следующие
 // сутки. Так корректно при ребуте в любой момент дня.
 function computeNextReinitDate(now, config) {
-    config = config || playlistConfig;
+    config = config || playerConfig;
     const list = config.playlists;
     const reinitMin = config.reshuffleAt
         ? toMinutes(config.reshuffleAt)                          // явное время побеждает
@@ -162,7 +162,7 @@ function computeNextReinitDate(now, config) {
 function getCurrentPlaylistConfig() {
     const nowMin = getNowMinutes(new Date());
 
-    for (const playlist of playlistConfig.playlists) {
+    for (const playlist of playerConfig.playlists) {
         const { startMin, endMin } = getPlaylistWindow(playlist);
         if (isTimeInRange(nowMin, startMin, endMin)) {
             return playlist;
@@ -179,7 +179,8 @@ function getCurrentPlaylistName() {
 
 function getCurrentPlaylistTableId() {
     const config = getCurrentPlaylistConfig();
-    return config ? config.tableId : 'unknown';
+    // per-playlist tableId (if set) overrides the global playerConfig.tableId
+    return (config && config.tableId) || playerConfig.tableId || 'unknown';
 }
 
 // ─────────────────────────────────────────────
@@ -190,7 +191,7 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
     const timestamp = new Date().toLocaleString('ru-RU')
 
     const data = {
-        'baseId': playlistConfig.baseId,
+        'baseId': playerConfig.baseId,
         'tableId': getCurrentPlaylistTableId(),
         'songName': currentTrackName,
         timestamp,

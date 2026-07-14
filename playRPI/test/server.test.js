@@ -79,10 +79,11 @@ test('player HTTP control API', { skip: !expressAvailable && 'node_modules not i
   }
 
   // -- volume reporting ------------------------------------------------------
-  await t.test('GET /volumeData returns the initial volume (80)', async () => {
+  await t.test('GET /volumeData returns the volume from playerConfig (76)', async () => {
+    // the preload config sets a NON-default volume — proves it's config-driven
     const res = await fetch(`${BASE}/volumeData`);
     assert.equal(res.status, 200);
-    assert.equal(await res.text(), '80');
+    assert.equal(await res.text(), '76');
   });
 
   // -- like / dislike scheduling ----------------------------------------------
@@ -105,21 +106,21 @@ test('player HTTP control API', { skip: !expressAvailable && 'node_modules not i
   // -- volume control -----------------------------------------------------------
   await t.test('volumeUp raises volume by 2', async () => {
     const res = await postValue('volumeUp');
-    assert.equal(await res.text(), '82');
+    assert.equal(await res.text(), '78');
   });
 
   await t.test('volumeDown lowers volume by 2', async () => {
     const res = await postValue('volumeDown');
-    assert.equal(await res.text(), '80');
+    assert.equal(await res.text(), '76');
     const data = await fetch(`${BASE}/volumeData`);
-    assert.equal(await data.text(), '80');
+    assert.equal(await data.text(), '76');
   });
 
   await t.test('volume is clamped at 100 (responds "max")', async () => {
-    for (let n = 0; n < 10; n++) await postValue('volumeUp');
+    for (let n = 0; n < 12; n++) await postValue('volumeUp'); // 76 → 100
     const res = await postValue('volumeUp');
     assert.equal(await res.text(), 'max');
-    for (let n = 0; n < 10; n++) await postValue('volumeDown');
+    for (let n = 0; n < 12; n++) await postValue('volumeDown'); // back to 76
   });
 
   await t.test('volume is clamped at 0 (responds "min")', async () => {

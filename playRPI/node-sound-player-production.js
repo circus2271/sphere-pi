@@ -2,8 +2,8 @@
 var fs = require('fs');
 var soundplayer = require('sound-player');
 const loudness = require('mwl-loudness');
-var volume = 80;
-const playlistConfig = require('./_playlistConfig')
+const playerConfig = require('./_playerConfig')
+var volume = playerConfig.volume ?? 80; // стартовая громкость из конфига
 const likeDislikeService = require('./_likeDislikeService')
 const recentTracksService = require('./_recentTracksService')
 const { log, warn, timestamp } = require('./_logger')
@@ -33,16 +33,16 @@ var sessionStopDate;   // locked in at boot - exact Date when today's session en
 var nextReinitDate;    // 24/7 only - exact Date of next reinit (= end of last playlist)
 
 // ─────────────────────────────────────────────
-//  РЕЖИМ РАБОТЫ (настраивается в _playlistConfig.js: mode24h)
+//  РЕЖИМ РАБОТЫ (настраивается в _playerConfig.js: mode24h)
 //  false → по расписанию daySchedule: процесс выходит
 //          в стоп-время, crontab поднимает на следующий старт.
 //  true  → круглосуточно: daySchedule игнорируется, процесс не выходит.
 //          Плейлисты перечитываются и перемешиваются заново (повторный
 //          вызов playerInitialization) в момент, когда наступает КОНЕЦ
-//          ВРЕМЕНИ (end) последнего плейлиста в playlistConfig — или в
+//          ВРЕМЕНИ (end) последнего плейлиста в playerConfig — или в
 //          reshuffleAt ('HH:MM'), если он задан в конфиге.
 // ─────────────────────────────────────────────
-const MODE_24H = playlistConfig.mode24h === true;
+const MODE_24H = playerConfig.mode24h === true;
 
 var options = {
     gain: 0,
@@ -52,7 +52,7 @@ var options = {
 
 ////////////variables and settings for server
 const app = express();
-const port = process.env.PORT || 3333;
+const port = process.env.PORT || playerConfig.port || 3333;
 const static_path = path.join(__dirname, 'public');
 app.use(express.static(static_path));
 app.use(express.urlencoded({ extended: true }));
@@ -138,10 +138,10 @@ function checkingOnReboot() {
     return;
   }
 
-  // ── Режим расписания (daySchedule в _playlistConfig.js) ──
-  if (playlistConfig.daySchedule) {
+  // ── Режим расписания (daySchedule в _playerConfig.js) ──
+  if (playerConfig.daySchedule) {
     const session = getActiveSession(now);
-    const todaySched = playlistConfig.daySchedule[now.getDay()];
+    const todaySched = playerConfig.daySchedule[now.getDay()];
     log(`Расписание дня: ${formatTime(toMinutes(todaySched.start))} → ${formatTime(toMinutes(todaySched.stop))}`);
 
     if (session) {
@@ -177,7 +177,7 @@ function playerInitialization() {
   log(`Громкость установлена: ${volume}`);
 
   // Load all configured playlists
-  playlistConfig.playlists.forEach(playlistConf => {
+  playerConfig.playlists.forEach(playlistConf => {
     allPlaylists[playlistConf.name] = parseTracksList(playlistConf.file);
     // Защищённая перемешка: при старте история пуста (= обычный shuffle),
     // при переинициализации недавние треки уходят в хвост.
@@ -312,7 +312,7 @@ function loadNextTrack() {
       playSong();
       return;
     }
-    warn('Нет активного плейлиста на текущее время (проверь окна в playlistConfig!). Выключаюсь.');
+    warn('Нет активного плейлиста на текущее время (проверь окна в playerConfig!). Выключаюсь.');
     process.exit(0);
     return;
   }

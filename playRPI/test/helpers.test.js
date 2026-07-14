@@ -22,7 +22,7 @@ const fakeConfig = {
     { name: 'night', file: '/tmp/ignored-night.txt', start: '20:00', end: '26:00', tableId: 'tbl-NIGHT' },
   ],
 };
-registerMock('_playlistConfig', fakeConfig);
+registerMock('_playerConfig', fakeConfig);
 
 // Fake node-fetch that records calls and returns a canned response.
 const fetchCalls = [];
@@ -383,6 +383,29 @@ test('collectStats survives silent hours (tableId falls back to "unknown")', () 
   );
   assert.equal(stats.tableId, 'unknown');
   assert.equal(stats.playlistName, 'unknown');
+});
+
+test('tableId: playerConfig top-level value is used, per-playlist overrides it', () => {
+  const originalPlaylists = fakeConfig.playlists;
+  fakeConfig.tableId = 'tbl-GLOBAL';
+  fakeConfig.playlists = [
+    { name: 'plain', file: '/tmp/x.txt', start: '08:00', end: '12:00' }, // no own tableId
+    { name: 'special', file: '/tmp/y.txt', start: '12:00', end: '20:00', tableId: 'tbl-SPECIAL' },
+  ];
+  try {
+    const plain = withTime(9, 0, () =>
+      helpers.collectStats('a', { scheduled: false, newStatus: null }, 0)
+    );
+    assert.equal(plain.tableId, 'tbl-GLOBAL');
+
+    const special = withTime(13, 0, () =>
+      helpers.collectStats('b', { scheduled: false, newStatus: null }, 0)
+    );
+    assert.equal(special.tableId, 'tbl-SPECIAL');
+  } finally {
+    fakeConfig.playlists = originalPlaylists;
+    delete fakeConfig.tableId;
+  }
 });
 
 // ---------------------------------------------------------------------------

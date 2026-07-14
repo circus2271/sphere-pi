@@ -1,5 +1,5 @@
 const { shuffle } = require('./_helpers');
-const playlistConfig = require('./_playlistConfig');
+const playerConfig = require('./_playerConfig');
 
 // ─────────────────────────────────────────────
 //  ЗАЩИТА ОТ НЕДАВНИХ ПОВТОРОВ
@@ -9,7 +9,7 @@ const playlistConfig = require('./_playlistConfig');
 //  плейлистах защита автоматически сжимается, чтобы перемешка
 //  не вырождалась. 30 треков ≈ 1.5–2 часа фоновой музыки.
 //
-//  recentGuard настраивается в _playlistConfig.js (default: 30).
+//  recentGuard настраивается в _playerConfig.js (default: 30).
 //  История живёт только в памяти процесса: после ребута пустая — это ок,
 //  первая перемешка после старта пройдёт без выноса недавних в хвост.
 // ─────────────────────────────────────────────
@@ -64,5 +64,5 @@ class RecentTracksService {
     }
 }
 
-module.exports = new RecentTracksService(playlistConfig.recentGuard ?? 30);
+module.exports = new RecentTracksService(playerConfig.recentGuard ?? 30);
 module.exports.RecentTracksService = RecentTracksService; // for tests
