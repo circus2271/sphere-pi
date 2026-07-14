@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +13,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "mwl-loudness": "^0.3.0",
+    "node-fetch": "^2.7.0",
     "sound-player": "^1.0.13"
   }
 }
