@@ -247,7 +247,7 @@ function send(url, data) {
             'Content-Type': 'application/json',
             // без этого node-fetch представляется как "node-fetch/1.0 (+https://github.com/bitinn/node-fetch)"
             // версия берётся из package.json — обновляется через `npm version`
-            'User-Agent': `sphere-pi-player/${version} (${os.hostname()})`,
+            'User-Agent': `sphere-pi/${version} (${os.hostname()})`,
         },
         body: JSON.stringify(data)
     })
