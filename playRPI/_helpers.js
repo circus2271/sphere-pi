@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const fetch = require('node-fetch')
+const { version } = require('./package.json');
 const playerConfig = require('./_playerConfig');
 const { log, warn, pad } = require('./_logger');
 
@@ -244,6 +245,9 @@ function send(url, data) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
+            // без этого node-fetch представляется как "node-fetch/1.0 (+https://github.com/bitinn/node-fetch)"
+            // версия берётся из package.json — обновляется через `npm version`
+            'User-Agent': `sphere-pi-player/${version} (${os.hostname()})`,
         },
         body: JSON.stringify(data)
     })
