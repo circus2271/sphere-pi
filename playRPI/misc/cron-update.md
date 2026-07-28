@@ -1,0 +1,1 @@
+45 4 * * * cd /home/pi/sphere-pi/playRPI && ./node_modules/.bin/zx deploy/update.js >> deploy/update.log 2>&1

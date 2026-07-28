@@ -33,6 +33,31 @@ var sessionStopDate;   // locked in at boot - exact Date when today's session en
 var nextReinitDate;    // 24/7 only - exact Date of next reinit (= end of last playlist)
 
 // ─────────────────────────────────────────────
+//  GRACEFUL RESTART ДЛЯ АВТООБНОВЛЕНИЯ
+//  Скрипт deploy/update.sh, подготовив новый код, шлёт SIGUSR2.
+//  Мы НЕ выходим сразу: ставим флаг, доигрываем текущий трек,
+//  ДОЖИДАЕМСЯ отправки статистики и только потом process.exit(0).
+//  systemd (Restart=always) поднимет процесс уже на новом коде.
+// ─────────────────────────────────────────────
+var restartPending = false;
+process.on('SIGUSR2', () => {
+  restartPending = true;
+  log('📦 Получен SIGUSR2: обновление готово — перезапущусь после текущего трека.');
+});
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Страховка для финальных отправок перед выходом: у node-fetch нет
+// таймаута по умолчанию, а висеть на мёртвом вайфае перед перезапуском
+// нельзя. По таймауту просто продолжаем (сами send-функции ошибки глотают).
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    sleep(ms).then(() => { throw new Error(`timeout after ${ms}ms`); }),
+  ]);
+}
+
+// ─────────────────────────────────────────────
 //  РЕЖИМ РАБОТЫ (настраивается в _playerConfig.js: mode24h)
 //  false → по расписанию daySchedule: процесс выходит
 //          в стоп-время, crontab поднимает на следующий старт.
@@ -45,9 +70,9 @@ var nextReinitDate;    // 24/7 only - exact Date of next reinit (= end of last p
 const MODE_24H = playerConfig.mode24h === true;
 
 var options = {
-    gain: 0,
-    debug: false,
-    player: 'mpg123',
+  gain: 0,
+  debug: false,
+  player: 'mpg123',
 }
 
 ////////////variables and settings for server
@@ -59,45 +84,45 @@ app.use(express.urlencoded({ extended: true }));
 
 ////////////////////////////////////////////////////server
 app.post('/request', (req, res) => {
-      if (req.body.value === 'like') {
-        likeDislikeService.scheduleLikeDislike({newStatus: 'Like'})
-        log(`👍 Лайк запланирован: "${currentTrackName}"`);
-        return res.json({currentTrackName, message: 'like scheduled'})
-      } else if (req.body.value === 'dislike') {
-        likeDislikeService.scheduleLikeDislike({newStatus: 'Dislike'})
-        log(`👎 Дизлайк запланирован: "${currentTrackName}"`);
-        return res.json({currentTrackName, message: 'dislike scheduled'})
-      } else if (req.body.value == 'volumeDown') {
-          if (volume == 0) {
-            res.send('min');
-            return;
-          }
-          else {
-            volume = volume - 2;
-            loudness.setVolume(volume);
-            log(`Громкость → ${volume}`);
-            res.send(''+volume);
-            return;
-          }
-        }
-      else if (req.body.value == 'volumeUp') {
-          if (volume == 100) {
-            res.send('max');
-            return;
-          }
-          else {
-            volume = volume + 2;
-            loudness.setVolume(volume);
-            log(`Громкость → ${volume}`);
-            res.send(''+volume);
-            return;
-          }
-        }
+  if (req.body.value === 'like') {
+    likeDislikeService.scheduleLikeDislike({newStatus: 'Like'})
+    log(`👍 Лайк запланирован: "${currentTrackName}"`);
+    return res.json({currentTrackName, message: 'like scheduled'})
+  } else if (req.body.value === 'dislike') {
+    likeDislikeService.scheduleLikeDislike({newStatus: 'Dislike'})
+    log(`👎 Дизлайк запланирован: "${currentTrackName}"`);
+    return res.json({currentTrackName, message: 'dislike scheduled'})
+  } else if (req.body.value == 'volumeDown') {
+    if (volume == 0) {
+      res.send('min');
+      return;
+    }
+    else {
+      volume = volume - 2;
+      loudness.setVolume(volume);
+      log(`Громкость → ${volume}`);
+      res.send(''+volume);
+      return;
+    }
+  }
+  else if (req.body.value == 'volumeUp') {
+    if (volume == 100) {
+      res.send('max');
+      return;
+    }
+    else {
+      volume = volume + 2;
+      loudness.setVolume(volume);
+      log(`Громкость → ${volume}`);
+      res.send(''+volume);
+      return;
+    }
+  }
 
-      // Find current playlist name for response
-      const currentPlaylistName = getCurrentPlaylistName();
-      var arrayResponse = [currentTrackName, currentPlaylistName + ' list'];
-      res.send(arrayResponse);
+  // Find current playlist name for response
+  const currentPlaylistName = getCurrentPlaylistName();
+  var arrayResponse = [currentTrackName, currentPlaylistName + ' list'];
+  res.send(arrayResponse);
 })
 
 app.get('/volumeData', (req, res) => {
@@ -241,7 +266,14 @@ function playSong () {
     // clean up so next track could be liked or disliked
     likeDislikeService.resetLikeDislikeScheduledValues()
 
-    loadNextTrack();
+    // Обычный путь: следующий трек стартует СРАЗУ, до сетевых отправок —
+    // музыка не ждёт сеть. При ожидающем обновлении следующий трек не
+    // запускаем: доотправим статистику ниже и выйдем.
+    if (!restartPending) {
+      loadNextTrack();
+    } else {
+      log('⏸ Обновление ожидает — следующий трек не запускаю, доотправляю статистику…');
+    }
 
     // send those stats ang handle results
     if (stats.newStatus) {
@@ -253,7 +285,7 @@ function playSong () {
 
       // use here the same object, although it may be not the best name for it
       try {
-        const result = await sendLikeDislike(stats)
+        const result = await withTimeout(sendLikeDislike(stats), 15 * 1000)
         console.log(result)
         log(`${stats.newStatus} is sent`)
       } catch(error) {
@@ -262,14 +294,28 @@ function playSong () {
     }
 
     // to hopefully bypass airtable's 5 requests per second limit
-    setTimeout(async () => {
+    if (!restartPending) {
+      setTimeout(async () => {
+        try {
+          const result = await sendSongStats(stats);
+          console.log(result)
+        } catch(error) {
+          console.error(error)
+        }
+      }, 2000)
+    } else {
+      // Перед выходом ту же паузу ДОЖИДАЕМСЯ (иначе process.exit её отменит),
+      // затем отправляем статистику один раз — как обычно, без дублей.
+      await sleep(2000);
       try {
-        const result = await sendSongStats(stats);
+        const result = await withTimeout(sendSongStats(stats), 15 * 1000);
         console.log(result)
       } catch(error) {
         console.error(error)
       }
-    }, 2000)
+      log('■ Статистика отправлена — выхожу для обновления. systemd поднимет новый код.');
+      process.exit(0);
+    }
   });
 
   player.once('error', function(err) {
@@ -279,6 +325,16 @@ function playSong () {
 }
 
 function loadNextTrack() {
+  // ── Ожидающее обновление: путь БЕЗ висящих отправок ──
+  // Сюда при restartPending попадаем только из error-обработчика или
+  // таймера пустого плейлиста (обычный complete-путь при обновлении
+  // не вызывает loadNextTrack — он сам доотправляет статистику и выходит).
+  if (restartPending) {
+    log('■ Обновление ожидает — выхожу (отправок нет). systemd поднимет новый код.');
+    process.exit(0);
+    return;
+  }
+
   // ── Режим расписания: проверка окончания сессии ──
   // Сравниваем текущее время с моментом остановки, зафиксированным на
   // старте (sessionStopDate). Корректно и для стопа после полуночи.
@@ -327,14 +383,14 @@ function loadNextTrack() {
   } else {
     // Continue with current playlist
     if (i >= currentPlaylist.length - 1) {
-        // Круг доигран → перемешиваем заново (на месте), недавние
-        // треки уезжают в хвост — трек не заиграет вскоре после
-        // прошлого раза, включая шов «конец круга → начало нового».
-        recentTracksService.shuffleWithRecentGuard(currentPlaylist);
-        i = 0;
-        log('Плейлист доигран до конца — перемешал и начинаю сначала');
+      // Круг доигран → перемешиваем заново (на месте), недавние
+      // треки уезжают в хвост — трек не заиграет вскоре после
+      // прошлого раза, включая шов «конец круга → начало нового».
+      recentTracksService.shuffleWithRecentGuard(currentPlaylist);
+      i = 0;
+      log('Плейлист доигран до конца — перемешал и начинаю сначала');
     } else {
-        i += 1;
+      i += 1;
     }
   }
 
