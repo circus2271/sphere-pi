@@ -26,12 +26,13 @@
 //  (systemd с Restart=always, или свой bash wrapper-loop). Это
 //  забота супервизора, а не этого скрипта.
 // ─────────────────────────────────────────────────────────────
-
+import { $, cd, fs, path } from 'zx'
 $.verbose = false; // не засорять update.log сырыми командами — свои log() ниже
-
-const REPO_DIR = '/home/pi/sphere-pi';
+$.verbose = true
+const REPO_DIR = '/home/spherepi-peremena/sphere/sphere-pi';
 const APP_DIR = `${REPO_DIR}/playRPI`;
-const BRANCH = 'master';
+//const BRANCH = 'master';
+const BRANCH = 'v1.1.1'
 const FETCH_TIMEOUT = 60;     // сек на git fetch
 const EXIT_DEADLINE = 600;    // сек ожидания мягкого выхода (SIGUSR2)
 const POLL_INTERVAL = 5;      // сек между проверками, жив ли ещё старый PID
