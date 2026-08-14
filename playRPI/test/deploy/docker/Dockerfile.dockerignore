@@ -1,0 +1,16 @@
+# Контекст сборки — корень репозитория, а там много лишнего.
+# BuildKit подхватывает <Dockerfile>.dockerignore рядом с самим Dockerfile,
+# поэтому корневой .dockerignore трогать не пришлось.
+
+# node_modules собран под Windows — в контейнере ставим свой через npm ci
+**/node_modules
+.git
+
+# статика фронтенда и музыка на тесты не влияют, но весят
+playRPI/images
+playRPI/public/images
+playRPI/fonts
+playRPI/css
+playRPI/music
+playRPI/node-likedislike/js
+playRPI/js

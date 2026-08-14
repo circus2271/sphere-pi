@@ -2,7 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const fetch = require('node-fetch')
-const { version } = require('./package.json');
+// package.json лежит в КОРНЕ репозитория (на уровень выше playRPI) — вместе
+// с node_modules, чтобы deploy/update.mjs тоже видел зависимости.
+const { version } = require('../package.json');
 const playerConfig = require('./_playerConfig');
 const { log, warn, pad } = require('./_logger');
 

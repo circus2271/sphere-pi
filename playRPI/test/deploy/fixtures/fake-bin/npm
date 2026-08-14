@@ -1,0 +1,20 @@
+#!/bin/sh
+# Заглушка npm для test/deploy/update.test.js.
+#
+# Поведение задаётся содержимым файла $FAKE_NPM_CONTROL_FILE:
+#   "fail" → выходим с ошибкой (эмуляция сломанного npm ci)
+#   иначе  → создаём node_modules/.marker в ТЕКУЩЕЙ директории,
+#            по нему тест понимает, что npm ci реально звали
+#
+# update.mjs зовёт нас как `cd $APP_DIR && npm ci --omit=dev ...`,
+# поэтому cwd здесь — это APP_DIR.
+
+if [ -n "$FAKE_NPM_CONTROL_FILE" ] && [ -f "$FAKE_NPM_CONTROL_FILE" ] && grep -q fail "$FAKE_NPM_CONTROL_FILE"; then
+  echo "fake npm: специально падаю ($*)" >&2
+  exit 1
+fi
+
+mkdir -p node_modules
+: > node_modules/.marker
+echo "fake npm: $*"
+exit 0

@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────
+#  systemd-сервис плеера (режим 24/7)
+#
+#  Установка (через симлинк — файл остаётся управляемым через git):
+#    sudo ln -s /home/spherepi-peremena/sphere/sphere-pi/deploy/sphere-player.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now sphere-player
+#
+#  Полезное:
+#    systemctl status sphere-player
+#    journalctl -u sphere-player -f
+#    sudo systemctl restart sphere-player
+#
+#  ВАЖНО: Restart=always уместен только для mode24h: true.
+#  Для daySchedule-режима поменяй на Restart=on-failure — плеер сам
+#  выходит на ночь (exit 0), утренний запуск остаётся за cron/таймером.
+# ─────────────────────────────────────────────────────────────
+[Unit]
+Description=Sphere Pi audio player (24/7)
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=spherepi-peremena
+WorkingDirectory=/home/spherepi-peremena/sphere/sphere-pi/playRPI
+ExecStart=/usr/bin/node node-sound-player-production.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Заглушка systemctl: пишет аргументы вызова в $FAKE_SYSTEMCTL_LOG.
+# Тест по этому логу проверяет, что скрипт позвал daemon-reload / restart.
+# Настоящий systemd здесь не нужен — это проверяет docker-ярус.
+
+[ -n "$FAKE_SYSTEMCTL_LOG" ] && echo "$*" >> "$FAKE_SYSTEMCTL_LOG"
+echo "fake systemctl: $*"
+exit 0

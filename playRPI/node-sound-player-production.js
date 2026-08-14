@@ -29,6 +29,7 @@ const path = require('path');
 ////////////variables for player
 var i = 0;
 var currentPlaylist, allPlaylists = {}, currentTrackName, player, activePlaylistConfig;
+var currentPlaylistFile;   // файл списка, из которого сейчас играем (для дизлайка)
 var sessionStopDate;   // locked in at boot - exact Date when today's session ends
 var nextReinitDate;    // 24/7 only - exact Date of next reinit (= end of last playlist)
 
@@ -246,6 +247,14 @@ function playSong () {
   options.filename = currentPlaylist[i];
   currentTrackName = currentPlaylist[i].split('music/')[1];
 
+  // Файл списка запоминаем НА СТАРТЕ трека, пока конфиг ещё известен: к концу
+  // воспроизведения окно может закрыться (в 24/7 плеер продолжает играть тем же
+  // списком), и activePlaylistConfig станет null. Дизлайк всё равно должен
+  // знать, из какого файла удалять строку. Если окна нет — держим прежнее
+  // значение: список-то не менялся, играем всё из него же.
+  if (activePlaylistConfig) currentPlaylistFile = activePlaylistConfig.file;
+  const trackPlaylistFile = currentPlaylistFile;
+
   // История для защиты от недавних повторов
   recentTracksService.remember(currentPlaylist[i]);
 
@@ -262,7 +271,11 @@ function playSong () {
     const currentSongFullName = currentTrackName;
     const songNameWithoutExtension = currentSongFullName.replace('.mp3', '');
     const stats = collectStats(songNameWithoutExtension, likeDislikeService, i);
-    const currentPlaylistFileName = activePlaylistConfig.file // stores an entire path
+    // Путь к файлу списка, снятый на старте ЭТОГО трека (см. playSong).
+    // Раньше здесь читалось activePlaylistConfig.file, и в 24/7-дырке это
+    // падало с TypeError — причём ДО loadNextTrack ниже, из-за чего защитная
+    // ветка «продолжаю текущим плейлистом» была недостижима.
+    const currentPlaylistFileName = trackPlaylistFile
     // clean up so next track could be liked or disliked
     likeDislikeService.resetLikeDislikeScheduledValues()
 
@@ -279,8 +292,14 @@ function playSong () {
     if (stats.newStatus) {
       log(`${currentSongFullName} song will be ${stats.newStatus.toLowerCase()}d`) // liked or disliked
       if (stats.newStatus === 'Dislike') {
-        deletingTrackFromTXT(currentSongFullName, currentPlaylistFileName);
-        log(`👎 Дизлайк: "${currentSongFullName}" удалён из плейлиста`);
+        if (currentPlaylistFileName) {
+          deletingTrackFromTXT(currentSongFullName, currentPlaylistFileName);
+          log(`👎 Дизлайк: "${currentSongFullName}" удалён из плейлиста`);
+        } else {
+          // Сюда попадаем, только если трек заиграл до того, как стал известен
+          // хоть один файл списка. Дизлайк всё равно уедет в облако ниже.
+          warn(`Дизлайк "${currentSongFullName}": неизвестен файл плейлиста — из файла не удаляю.`);
+        }
       }
 
       // use here the same object, although it may be not the best name for it

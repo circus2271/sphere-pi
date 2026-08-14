@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --test test/*.test.js)",
+      "Bash(grep -n \"ajax\\\\|fetch\\\\|/request\\\\|volumeData\\\\|\\\\$\\(\" public/index.html)",
+      "PowerShell(wsl.exe -l -v 2>&1)",
+      "PowerShell(docker run --rm --entrypoint bash -v C:\\\\Users\\\\user\\\\fleet\\\\sphere-pi\\\\playRPI:/src:ro sphere-systemd-test -lc \"set -e; mkdir -p /work; cp /src/package.json /src/package-lock.json /src/_helpers.js /src/_likeDislikeService.js /src/_logger.js /src/_recentTracksService.js /src/node-sound-player-production.js /work/; cp -r /src/test /work/test; ln -s /home/pi/sphere-pi/playRPI/node_modules /work/node_modules; cd /work; node --test test/server.test.js 2>&1 | grep -A 45 'not ok 9'\" 2>&1)",
+      "PowerShell(docker run --rm --entrypoint bash -v C:\\\\Users\\\\user\\\\fleet\\\\sphere-pi\\\\playRPI:/src:ro sphere-systemd-test -lc \"set -e; mkdir -p /work; cp /src/package.json /src/package-lock.json /src/_helpers.js /src/_likeDislikeService.js /src/_logger.js /src/_recentTracksService.js /src/node-sound-player-production.js /work/; cp -r /src/test /work/test; ln -s /home/pi/sphere-pi/playRPI/node_modules /work/node_modules; cd /work; node --test test/server.test.js 2>&1 | grep -B 6 -A 12 'TypeError'\" 2>&1)",
+      "PowerShell(docker run --rm --entrypoint bash -v C:\\\\Users\\\\user\\\\fleet\\\\sphere-pi\\\\playRPI:/src:ro sphere-systemd-test -lc \"set -e; mkdir -p /work; cp /src/package.json /src/package-lock.json /src/_helpers.js /src/_likeDislikeService.js /src/_logger.js /src/_recentTracksService.js /src/node-sound-player-production.js /work/; cp -r /src/test /work/test; cp -r /src/deploy /work/deploy 2>/dev/null || true; ln -s /home/pi/sphere-pi/playRPI/node_modules /work/node_modules; cd /work; node --test test/ 2>&1 | grep -E '^\\(not ok|# \\(tests|pass|fail|skip|todo\\)\\)'\" 2>&1)",
+      "PowerShell(docker run --rm --entrypoint bash -v C:\\\\Users\\\\user\\\\fleet\\\\sphere-pi:/src:ro -v C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-user-fleet-sphere-pi\\\\0ef5f642-6920-48d5-b64e-8a4a9df15231\\\\scratchpad:/scripts:ro sphere-systemd-test /scripts/zombiecheck.sh 2>&1)"
+    ]
+  }
+}

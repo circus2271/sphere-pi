@@ -3,7 +3,9 @@
   "version": "1.1.1",
   "main": "index.js",
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test playRPI/test/*.test.js",
+    "test:deploy": "node --test playRPI/test/deploy/update.test.js",
+    "test:docker": "node --test playRPI/test/deploy/docker/systemd.test.js"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +17,6 @@
     "mwl-loudness": "^0.3.0",
     "node-fetch": "^2.7.0",
     "sound-player": "^1.0.13",
-    "zx": "^8.1.0"
+    "zx": "^8.8.5"
   }
 }
