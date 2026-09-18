@@ -193,10 +193,18 @@ function playerInitialization() {
   });
 
   // Set current playlist
-  activePlaylistConfig = getCurrentPlaylistConfig();
-  if (activePlaylistConfig) {
+  const newActivePlaylistConfig = getCurrentPlaylistConfig();
+  if (newActivePlaylistConfig) {
+    activePlaylistConfig = newActivePlaylistConfig;
     currentPlaylist = allPlaylists[activePlaylistConfig.name];
     log(`Активный плейлист: "${activePlaylistConfig.name}"`);
+  } else if (activePlaylistConfig) {
+    // Окно уже закончилось к моменту этого вызова (гонка на границе окон,
+    // caller только что успешно определил activePlaylistConfig) — не теряем
+    // его, иначе он станет null и следующий 'complete' упадёт на .file
+    // (см. аналогичную защиту в loadNextTrack).
+    currentPlaylist = allPlaylists[activePlaylistConfig.name];
+    warn(`Окно плейлиста "${activePlaylistConfig.name}" уже закончилось к моменту инициализации — продолжаю им.`);
   }
 
   // В режиме 24/7 запоминаем момент следующей переинициализации
