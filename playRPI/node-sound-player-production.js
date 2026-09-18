@@ -301,12 +301,14 @@ function loadNextTrack() {
   }
 
   // Check if playlist should change (time-based switching between playlists)
-  activePlaylistConfig = getCurrentPlaylistConfig();
+  const newActivePlaylistConfig = getCurrentPlaylistConfig();
 
-  if (!activePlaylistConfig) {
+  if (!newActivePlaylistConfig) {
     if (MODE_24H) {
       // В 24/7 дырок между окнами быть не должно, но на всякий случай
-      // не выходим, а продолжаем текущим списком.
+      // не выходим, а продолжаем текущим списком. activePlaylistConfig
+      // намеренно НЕ трогаем — иначе он станет null, и следующий 'complete'
+      // упадёт на activePlaylistConfig.file.
       warn('Нет окна плейлиста на текущее время, но режим 24/7 — продолжаю текущим плейлистом. Проверь окна start/end!');
       if (i >= currentPlaylist.length - 1) { recentTracksService.shuffleWithRecentGuard(currentPlaylist); i = 0; } else { i += 1; }
       playSong();
@@ -317,6 +319,7 @@ function loadNextTrack() {
     return;
   }
 
+  activePlaylistConfig = newActivePlaylistConfig;
   const newPlaylist = allPlaylists[activePlaylistConfig.name];
 
   // If playlist changed, switch and reset index
