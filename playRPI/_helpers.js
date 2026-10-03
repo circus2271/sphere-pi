@@ -188,7 +188,7 @@ function getCurrentPlaylistTableId() {
 //  STATS / AIRTABLE
 // ─────────────────────────────────────────────
 
-function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
+function collectStats(currentTrackName, likeDislikeService, currentTrackIndex, playlistName) {
     const timestamp = new Date().toLocaleString('ru-RU')
 
     const data = {
@@ -197,7 +197,7 @@ function collectStats(currentTrackName, likeDislikeService, currentTrackIndex) {
         'songName': currentTrackName,
         timestamp,
         currentIndex: currentTrackIndex,
-        playlistName: getCurrentPlaylistName(),
+        playlistName: playlistName,
         deviceUniqueId: os.hostname(),
     }
 

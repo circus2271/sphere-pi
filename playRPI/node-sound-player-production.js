@@ -229,6 +229,9 @@ function playSong () {
   options.filename = currentPlaylist[i];
   currentTrackName = currentPlaylist[i].split('music/')[1];
 
+  const playlistName = getCurrentPlaylistName();
+
+
   // История для защиты от недавних повторов
   recentTracksService.remember(currentPlaylist[i]);
 
@@ -244,7 +247,7 @@ function playSong () {
   player.once('complete', async function(){
     const currentSongFullName = currentTrackName;
     const songNameWithoutExtension = currentSongFullName.replace('.mp3', '');
-    const stats = collectStats(songNameWithoutExtension, likeDislikeService, i);
+    const stats = collectStats(songNameWithoutExtension, likeDislikeService, i, playlistName);
     const currentPlaylistFileName = activePlaylistConfig.file // stores an entire path
     // clean up so next track could be liked or disliked
     likeDislikeService.resetLikeDislikeScheduledValues()
