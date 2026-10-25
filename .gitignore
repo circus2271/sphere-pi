@@ -13,3 +13,12 @@ tracksMorning.txt
 tracksDay.txt
 tracksEvening.txt
 archive
+
+# Завхоз: своё на каждом устройстве
+playlist.json
+zavhoz-state.json
+zavhoz.log
+zavhoz.lock
+
+# служебные файлы Finder на Маке
+.DS_Store
