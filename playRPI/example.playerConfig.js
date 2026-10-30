@@ -3,6 +3,10 @@ const path = require("path");
 // FLEXIBLE PLAYLIST CONFIGURATION
 // Copy this file to `_playerConfig.js` (it's gitignored) and edit.
 //
+// Если рядом есть рабочий playlist.json от Завхоза, плеер берёт треки и расписание
+// из него, а playlists, daySchedule, mode24h и reshuffleAt отсюда не использует.
+// Они нужны как запасной путь, пока файла нет. Громкость, порт и baseId — только здесь.
+//
 // Time format: 'HH:MM' with minute precision ('11:30' works, not just '11').
 // end/stop > '24:00' means "after midnight, next day": '26:00' = 02:00 next day.
 //

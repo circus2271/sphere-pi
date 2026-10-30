@@ -6,6 +6,7 @@ const playerConfig = require('./_playerConfig')
 var volume = playerConfig.volume ?? 80; // стартовая громкость из конфига
 const likeDislikeService = require('./_likeDislikeService')
 const recentTracksService = require('./_recentTracksService')
+const playlistSource = require('./_playlistSource')
 const { log, warn, timestamp } = require('./_logger')
 const {
   parseTracksList,
@@ -41,8 +42,21 @@ var nextReinitDate;    // 24/7 only - exact Date of next reinit (= end of last p
 //          вызов playerInitialization) в момент, когда наступает КОНЕЦ
 //          ВРЕМЕНИ (end) последнего плейлиста в playerConfig — или в
 //          reshuffleAt ('HH:MM'), если он задан в конфиге.
+//
+//  Если есть рабочий playlist.json от Завхоза, всё это не применяется:
+//  процесс живёт всегда, музыка играет по расписанию из файла. Круглосуточная
+//  работа там — просто интервал 00:00–24:00. Файл перечитывается в начале
+//  каждой сессии, для круглосуточной это полночь.
+//  Флаг и окна из конфига работают, только пока рабочего файла нет.
 // ─────────────────────────────────────────────
-const MODE_24H = playerConfig.mode24h === true;
+var mode24h = playerConfig.mode24h === true;
+
+const configPlaylists = playerConfig.playlists;
+const configDaySchedule = playerConfig.daySchedule;
+var usingPlaylistFile = false;
+var recordIds = {};            // путь к файлу -> id записи в Airtable
+var waitingForMusic = false;
+const dislikedTracks = new Set(); // чтобы дизлайкнутое не вернулось, пока Завхоз не обновил файл
 
 var options = {
     gain: 0,
@@ -104,8 +118,12 @@ app.get('/volumeData', (req, res) => {
   res.send(''+volume);
 })
 
-const server = app.listen(port, () => {
+const server = app.listen(port, (err) => {
+  if (err) return; // Express 5 зовёт сюда и при ошибке, разбирает её server.on('error') ниже
   log(`Веб-пульт запущен на порту ${port}`);
+  // Только когда порт наш: второй экземпляр выйдет с ошибкой порта раньше,
+  // чем успеет запустить mpg123 поверх первого.
+  checkingOnReboot();
 });
 
 // Понятная ошибка вместо stack trace, если порт уже занят
@@ -124,13 +142,64 @@ server.on('error', (err) => {
 
 
 /////////////////////////////////////////////////player
+// Кладём данные из playlist.json в playerConfig: оттуда их читают
+// getActiveSession, getCurrentPlaylistConfig и остальные помощники.
+// Нет рабочего файла — возвращаем то, что записано в конфиге.
+function loadPlaylistSource(now) {
+  const fromFile = playlistSource.getPlaylists(now);
+  const schedule = fromFile && playlistSource.getDaySchedule();
+
+  if (schedule) {
+    playerConfig.playlists = fromFile.playlists;
+    playerConfig.daySchedule = schedule;
+    recordIds = fromFile.recordIds;
+    usingPlaylistFile = true;
+    mode24h = false;
+    return fromFile;
+  }
+
+  if (usingPlaylistFile) warn('playlist.json больше не годится — возвращаюсь к _playerConfig.js и txt.');
+  playerConfig.playlists = configPlaylists;
+  playerConfig.daySchedule = configDaySchedule;
+  recordIds = {};
+  usingPlaylistFile = false;
+  mode24h = playerConfig.mode24h === true;
+  return null;
+}
+
+function startFromPlaylistFile(now, fromFile) {
+  const session = getActiveSession(now);
+  const window = getCurrentPlaylistConfig();
+
+  if (session && window) {
+    waitingForMusic = false;
+    sessionStopDate = computeSessionStopDate(session);
+    activePlaylistConfig = window;
+    log(`Источник: playlist.json, плейлист "${fromFile.activePlaylist}", собран ${fromFile.generatedAt}. Статус Завхоза: ${playlistSource.getZavhozStatus() || 'нет данных'}`);
+    log(`Музыкальное время ✓ — играем до ${timestamp(sessionStopDate)}`);
+    playerInitialization();
+    return;
+  }
+
+  if (!waitingForMusic) log('По расписанию сейчас музыки нет — жду следующего интервала.');
+  waitingForMusic = true;
+  setTimeout(checkingOnReboot, 60 * 1000);
+}
+
 function checkingOnReboot() {
   const now = new Date();
 
-  log('═══════════ SPHERE PLAYER — ЗАПУСК ═══════════');
+  if (!waitingForMusic) log('═══════════ SPHERE PLAYER — ЗАПУСК ═══════════');
+
+  const fromFile = loadPlaylistSource(now);
+  if (fromFile) {
+    startFromPlaylistFile(now, fromFile);
+    return;
+  }
+  waitingForMusic = false;
 
   // ── Режим 24/7: расписание дней не проверяем, играем всегда ──
-  if (MODE_24H) {
+  if (mode24h) {
     log('Режим 24/7 — круглосуточно, расписание дней игнорируется.');
     sessionStopDate = null; // в 24/7 выключаться некуда
     activePlaylistConfig = getCurrentPlaylistConfig();
@@ -170,22 +239,26 @@ function checkingOnReboot() {
   }
 }
 
-checkingOnReboot();
-
 function playerInitialization() {
   loudness.setVolume(volume);
   log(`Громкость установлена: ${volume}`);
 
+  // Списки могли стать короче, старый номер трека вышел бы за их край.
+  allPlaylists = {};
+  i = 0;
+
   // Load all configured playlists
   playerConfig.playlists.forEach(playlistConf => {
-    allPlaylists[playlistConf.name] = parseTracksList(playlistConf.file);
+    allPlaylists[playlistConf.name] = playlistConf.tracks
+      ? playlistConf.tracks.filter(track => !dislikedTracks.has(track))
+      : parseTracksList(playlistConf.file);
     // Защищённая перемешка: при старте история пуста (= обычный shuffle),
     // при переинициализации недавние треки уходят в хвост.
     recentTracksService.shuffleWithRecentGuard(allPlaylists[playlistConf.name]);
 
     const count = allPlaylists[playlistConf.name].length;
     if (count === 0) {
-      warn(`Плейлист "${playlistConf.name}" ПУСТ или файл не найден: ${playlistConf.file}`);
+      warn(`Плейлист "${playlistConf.name}" ПУСТ или файл не найден: ${playlistConf.file || 'playlist.json'}`);
     } else {
       const { startMin, endMin } = getPlaylistWindow(playlistConf);
       log(`Плейлист "${playlistConf.name}" (${formatTime(startMin)}–${formatTime(endMin)}): ${count} треков`);
@@ -211,7 +284,7 @@ function playerInitialization() {
   // (= ближайший будущий end последнего плейлиста, либо reshuffleAt).
   // Обновляется здесь же при каждом повторном вызове playerInitialization,
   // поэтому loadNextTrack только сравнивает с ним, а не пересчитывает.
-  if (MODE_24H) {
+  if (mode24h) {
     nextReinitDate = computeNextReinitDate(new Date());
     log(`Следующая переинициализация (24/7): ${timestamp(nextReinitDate)}`);
   }
@@ -226,8 +299,9 @@ function playSong () {
     return;
   }
 
-  options.filename = currentPlaylist[i];
-  currentTrackName = currentPlaylist[i].split('music/')[1];
+  const trackPath = currentPlaylist[i];
+  options.filename = trackPath;
+  currentTrackName = trackPath.split('music/')[1];
 
   const playlistName = getCurrentPlaylistName();
 
@@ -248,6 +322,12 @@ function playSong () {
     const currentSongFullName = currentTrackName;
     const songNameWithoutExtension = currentSongFullName.replace('.mp3', '');
     const stats = collectStats(songNameWithoutExtension, likeDislikeService, i, playlistName);
+    if (usingPlaylistFile) {
+      // Имя файла не всегда совпадает с полем Name, поэтому ищем трек по id.
+      // Таблицу берём у плейлиста: в конце трека окно уже могло закончиться.
+      stats.recordId = recordIds[trackPath];
+      stats.tableId = activePlaylistConfig.tableId || stats.tableId;
+    }
     const currentPlaylistFileName = activePlaylistConfig.file // stores an entire path
     // clean up so next track could be liked or disliked
     likeDislikeService.resetLikeDislikeScheduledValues()
@@ -258,7 +338,12 @@ function playSong () {
     if (stats.newStatus) {
       log(`${currentSongFullName} song will be ${stats.newStatus.toLowerCase()}d`) // liked or disliked
       if (stats.newStatus === 'Dislike') {
-        deletingTrackFromTXT(currentSongFullName, currentPlaylistFileName);
+        // Из playlist.json трек уберёт Завхоз, когда увидит дизлайк в Airtable.
+        if (currentPlaylistFileName) {
+          deletingTrackFromTXT(currentSongFullName, currentPlaylistFileName);
+        } else {
+          dislikedTracks.add(trackPath);
+        }
         log(`👎 Дизлайк: "${currentSongFullName}" удалён из плейлиста`);
       }
 
@@ -275,7 +360,8 @@ function playSong () {
     // to hopefully bypass airtable's 5 requests per second limit
     setTimeout(async () => {
       try {
-        const result = await sendSongStats(stats);
+        const zavhozStatus = playlistSource.getZavhozStatus();
+        const result = await sendSongStats(zavhozStatus ? { ...stats, zavhozStatus } : stats);
         console.log(result)
       } catch(error) {
         console.error(error)
@@ -294,7 +380,12 @@ function loadNextTrack() {
   // Сравниваем текущее время с моментом остановки, зафиксированным на
   // старте (sessionStopDate). Корректно и для стопа после полуночи.
   // В режиме 24/7 sessionStopDate == null, поэтому сюда не заходим.
-  if (!MODE_24H && sessionStopDate && new Date().getTime() >= sessionStopDate.getTime()) {
+  if (!mode24h && sessionStopDate && new Date().getTime() >= sessionStopDate.getTime()) {
+    if (usingPlaylistFile) {
+      log(`■ Сессия завершена (план был: ${timestamp(sessionStopDate)}). Перечитываю playlist.json.`);
+      checkingOnReboot();
+      return;
+    }
     log(`■ Сессия завершена (план был: ${timestamp(sessionStopDate)}). Выключаюсь. До завтра!`);
     process.exit(0);
     return;
@@ -305,9 +396,14 @@ function loadNextTrack() {
   // заново через ПОВТОРНЫЙ вызов playerInitialization. Она же пересчитает
   // следующий nextReinitDate и сама запустит playSong, поэтому здесь
   // сразу return (иначе задвоим воспроизведение).
-  if (MODE_24H && nextReinitDate && new Date().getTime() >= nextReinitDate.getTime()) {
+  if (mode24h && nextReinitDate && new Date().getTime() >= nextReinitDate.getTime()) {
     log(`🔄 Конец цикла 24/7 (${timestamp(nextReinitDate)}). Переинициализация: перечитываю .txt и перемешиваю.`);
-    playerInitialization();
+    // Завхоз мог успеть написать playlist.json, пока мы играли по старому пути.
+    if (playlistSource.getPlaylists(new Date())) {
+      checkingOnReboot();
+    } else {
+      playerInitialization();
+    }
     return;
   }
 
@@ -315,7 +411,12 @@ function loadNextTrack() {
   const newActivePlaylistConfig = getCurrentPlaylistConfig();
 
   if (!newActivePlaylistConfig) {
-    if (MODE_24H) {
+    if (usingPlaylistFile) {
+      // Дырка между интервалами: музыка вернётся сама, выходить незачем.
+      checkingOnReboot();
+      return;
+    }
+    if (mode24h) {
       // В 24/7 дырок между окнами быть не должно, но на всякий случай
       // не выходим, а продолжаем текущим списком. activePlaylistConfig
       // намеренно НЕ трогаем — иначе он станет null, и следующий 'complete'
