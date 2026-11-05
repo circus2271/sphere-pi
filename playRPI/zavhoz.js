@@ -222,6 +222,34 @@ function releaseLock() {
 // именем.
 const diskKey = name => name.normalize('NFC');
 
+// Имя файла на пирожке. Обычно это имя из Airtable без изменений: так уже
+// скачанные файлы остаются на месте и не качаются заново.
+//
+// Длиннее 255 байт имя файла на карте быть не может, а пока трек качается,
+// к имени добавляется ".part". Отсюда 250. Такие имена бывают: Airtable отдаёт
+// имя в кодах вида %D0%9E (русская буква — 6 знаков, тайская — 9) и обрезает
+// его на 255 байтах, уже без ".mp3". Раскодировать обрезанное нельзя,
+// поэтому просто укорачиваем и дописываем номер записи: два трека с одинаковым
+// началом имени не попадут в один файл. Статистика ищет трек по номеру записи,
+// так что имя файла ни на что, кроме вида в логе, не влияет.
+const MAX_NAME_BYTES = 250;
+
+function localFileName(track) {
+  const name = track.fileName;
+  if (Buffer.byteLength(name) <= MAX_NAME_BYTES) return name;
+  if (!/^[A-Za-z0-9]+$/.test(track.recordId || '')) return null;
+
+  const tail = ` ${track.recordId}.mp3`;
+  const room = MAX_NAME_BYTES - Buffer.byteLength(tail);
+  let head = '';
+  // По символам, а не по байтам: букву пополам не режем.
+  for (const ch of name.replace(/\.mp3$/i, '')) {
+    if (Buffer.byteLength(head + ch) > room) break;
+    head += ch;
+  }
+  return head.trimEnd() + tail;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Работа со временем.
 // Сервер присылает 'HH:MM'. Плеер на пирожке использует соглашение, где конец
@@ -517,9 +545,17 @@ function downloadToFile(url, destPath, firstByteMs, redirectsLeft = MAX_REDIRECT
 const failsInARow = new Map();
 const movedBack = new Set();
 
+// Ошибка на самом пирожке (карта, права, длина имени), а не у хостинга.
+// У ошибок работы с файлом Node указывает путь к нему, у сетевых пути нет.
+// Коды — для ошибок без пути, например при записи на карту в конце скачивания.
+const LOCAL_ERROR_CODES = new Set(['ENOSPC', 'EDQUOT', 'EROFS', 'EIO', 'ENAMETOOLONG', 'EMFILE', 'ENFILE', 'EISDIR', 'ENOTDIR', 'EBADF']);
+const isLocalError = e => typeof e?.path === 'string' || LOCAL_ERROR_CODES.has(e?.code);
+
 function noteResult(source, error) {
   // Ответ сервера вроде 404 говорит о файле, а не о связи с хостингом.
   if (error?.statusCode) return;
+  // Ошибка карты говорит о пирожке, а не о хостинге.
+  if (isLocalError(error)) return;
 
   if (!error) {
     failsInARow.set(source.key, 0);
@@ -601,6 +637,12 @@ async function downloadTrack(track) {
         noteResult(source, null);
         return { ok: true, viaFallback: !source.isMain, size };
       } catch (e) {
+        // Файл не записать на пирожке — другой источник тут не поможет.
+        // Пробуем снова в следующих попытках прохода.
+        if (isLocalError(e)) {
+          log(`  ✗ Ошибка на пирожке, не у хостинга: ${e.message}`);
+          return { ok: false };
+        }
         log(`  ✗ ${source.label}: ${e.message}`);
         noteResult(source, e);
         // Хранилище без открытого списка на отсутствующий файл отвечает 403, а не 404.
@@ -853,8 +895,16 @@ async function main() {
     manifest.tracks = manifest.tracks.filter(t => {
       const ok = typeof t.fileName === 'string' && t.fileName && t.url
         && path.basename(t.fileName) === t.fileName;
-      if (!ok) warnings.push(`«${p.name}»: пропущена запись ${t.recordId} с неправильным именем файла`);
-      return ok;
+      const local = ok && localFileName(t);
+      if (!local) {
+        warnings.push(`«${p.name}»: пропущена запись ${t.recordId} с неправильным именем файла`);
+        return false;
+      }
+      if (local !== t.fileName) {
+        log(`  Имя у записи ${t.recordId} длиннее ${MAX_NAME_BYTES} байт, на диске будет: ${local}`);
+        t.fileName = local;
+      }
+      return true;
     });
     loaded.push({ name: p.name, tableId: p.tableId, manifest });
   }
