@@ -99,6 +99,13 @@ const RETRY_WAIT_MS = 30000;
 const REQUEST_DEADLINE_MS = 120000;  // весь ответ функции, от подключения до конца
 
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const IN_DAY = { sunday: 'в воскресенье', monday: 'в понедельник', tuesday: 'во вторник',
+  wednesday: 'в среду', thursday: 'в четверг', friday: 'в пятницу', saturday: 'в субботу' };
+
+// Как часто крон запускает Завхоз: строка `0 */3 * * *` в crontab, плюс случайная
+// задержка до JITTER_MAX_SECONDS. Нужно, чтобы написать в статусе, когда следующая
+// проверка. Поменяли расписание в crontab — поменять и здесь.
+const CRON_EVERY_HOURS = 3;
 
 const args = process.argv.slice(2);
 const flag = name => args.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
@@ -789,13 +796,13 @@ function whyKeepOldPlaylist(manifest, built, available, gone) {
       : !!old.days;
   } catch {}
 
-  if (!hasMusic) return oldIsUsable ? 'в новом плейлисте нет ни одного трека с расписанием' : 'нет музыки для записи';
+  if (!hasMusic) return oldIsUsable ? 'в нём нет ни одного скачанного трека с расписанием' : 'нет музыки для записи';
   if (!oldIsUsable) return null;
 
   const expected = manifest.tracks.filter(t => !gone.has(diskKey(t.fileName)));
   const notHere = expected.filter(t => !available.has(diskKey(t.fileName))).length;
   if (notHere / expected.length > MAX_MISSING_SHARE) {
-    return `не хватает ${notHere} треков из ${expected.length}`;
+    return `не скачано ${notHere} из ${expected.length}`;
   }
 
   // Интервал мог опустеть целиком, даже если треков не хватает немного.
@@ -803,7 +810,7 @@ function whyKeepOldPlaylist(manifest, built, available, gone) {
   const complete = buildDays({ tracks: expected }, everything);
   for (const d of DAYS) {
     if (complete.days[d].intervals.length !== built.days[d].intervals.length) {
-      return `в расписании на ${d} опустел целый интервал`;
+      return `${IN_DAY[d]} опустел целый интервал`;
     }
   }
 
@@ -824,30 +831,112 @@ function playlistChanged(next) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Состояние для людей: две даты и итог. Строку status плеер отправляет вместе со
-// статистикой, поэтому из Airtable видно, как Завхоз работает, без входа на устройство.
-//   последняя проверка — когда проход закончился, чем бы он ни закончился;
-//   последняя работа   — когда что-то реально изменилось: скачан трек или обновлён плейлист.
-// Проверка без изменений — норма, поэтому дата работы может быть старой и это не сбой.
+// Статус для куратора. Плеер отправляет его с каждым сыгранным треком в колонку
+// «Zavhoz status» таблицы Timestamps, поэтому из Airtable видно, что на пирожке,
+// без входа на устройство. Строку собирает шаблон, слова в нём всегда одни и те же:
+//
+//   [⚠ предупреждения.] Играет {плейлист}, {скачано} из {в базе} на плеере ({изменение}).
+//   Альтернативный плейлист — {плейлист}, {скачано} из {в базе} ({изменение}).
+//   Плейлист обновлён {дата}. Завхоз проверил базу {дата}, следующая проверка {дата}.
+//
+// «Изменение» — что поменялось на плеере при последней записи playlist.json,
+// оно держится до следующей записи, как и дата «Плейлист обновлён».
 // ─────────────────────────────────────────────────────────────────────────────
-function shortDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  const p = n => String(n).padStart(2, '0');
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+const pad2 = n => String(n).padStart(2, '0');
+const dayOf = d => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}`;
+const timeOf = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const dayTime = iso => { const d = new Date(iso); return `${dayOf(d)} в ${timeOf(d)}`; };
+
+// Ближайшая отметка крона после `from` и она же плюс наибольшая задержка.
+function nextCheckWindow(from) {
+  const start = new Date(from);
+  start.setMinutes(0, 0, 0);
+  do start.setHours(start.getHours() + 1); while (start.getHours() % CRON_EVERY_HOURS !== 0);
+  const end = new Date(start.getTime() + JITTER_MAX_SECONDS * 1000);
+  return `${dayOf(start)} в ${timeOf(start)}–${timeOf(end)}`;
 }
 
-function statusLine(checkAt, problem, workAt) {
-  return `проверка ${shortDate(checkAt)} ${problem ? `не ок: ${problem}` : 'ок'}; работа ${shortDate(workAt)}`;
+// 1 трек, 2 трека, 5 треков.
+function plural(n, [one, few, many]) {
+  const t = n % 100, u = n % 10;
+  if (t >= 11 && t <= 14) return many;
+  return u === 1 ? one : u >= 2 && u <= 4 ? few : many;
 }
+const tracksWord = n => `${n} ${plural(n, ['трек', 'трека', 'треков'])}`;
 
-function previousWorkAt() {
+function readJson(file) {
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')).lastWorkAt || null;
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return null;
   }
 }
+
+// Записи плейлиста из playlist.json и его расписание без имён файлов: если
+// поменялось только имя файла, для куратора это «без изменений».
+function recordIdsOf(p) {
+  return new Set(DAYS.flatMap(d => (p.days?.[d]?.intervals || []).flatMap(i => i.tracks.map(t => t.recordId))));
+}
+function scheduleOf(p) {
+  return JSON.stringify(DAYS.map(d => (p.days?.[d]?.intervals || [])
+    .map(i => `${i.start}-${i.end}:${i.tracks.map(t => t.recordId).sort().join(',')}`)));
+}
+
+// Что поменялось в каждом плейлисте нового файла по сравнению с прежним.
+function describeChanges(prevFile, next) {
+  const changes = {};
+  for (const p of next.playlists) {
+    const old = Array.isArray(prevFile?.playlists) ? prevFile.playlists.find(x => x.name === p.name) : null;
+    if (!old) {
+      changes[p.name] = { isNew: true };
+      continue;
+    }
+    const was = recordIdsOf(old), now = recordIdsOf(p);
+    changes[p.name] = {
+      added: [...now].filter(id => !was.has(id)).length,
+      removed: [...was].filter(id => !now.has(id)).length,
+      scheduleChanged: scheduleOf(old) !== scheduleOf(p),
+    };
+  }
+  return changes;
+}
+
+function changeLabel(c) {
+  if (!c) return '';
+  if (c.isNew) return ' (новый)';
+  const parts = [];
+  if (c.added) parts.push(`+${c.added}`);
+  if (c.removed) parts.push(`−${c.removed}`);
+  if (parts.length) return ` (${parts.join(' ')})`;
+  return c.scheduleChanged ? ' (изменено расписание)' : ' (без изменений)';
+}
+
+// Всё, кроме предупреждений и строки о проверке: что играет и когда обновлён.
+//   counts  — [{ name, onPlayer, inBase }], первым тот, что должен играть
+//   playing — какой плейлист записан в playlist.json, null — файла нет
+//   heldBack — новый список не поставлен, играет записанный раньше
+function playlistSummary(counts, playing, changes, updatedAt, heldBack) {
+  const [first, ...others] = counts;
+  const ofFirst = `${first.onPlayer} из ${first.inBase} на плеере`;
+  let s;
+  if (!playing) s = `Играет старый список из txt. В базе ${first.name}: ${ofFirst}.`;
+  else if (heldBack) s = `Играет прежний список ${playing}${updatedAt ? ` от ${dayTime(updatedAt)}` : ''}. В базе ${first.name}: ${ofFirst}.`;
+  else s = `Играет ${first.name}, ${ofFirst}${changeLabel(changes?.[first.name])}.`;
+
+  if (others.length) {
+    s += ` ${others.length > 1 ? 'Альтернативные плейлисты' : 'Альтернативный плейлист'} — `
+      + others.map(p => `${p.name}, ${p.onPlayer} из ${p.inBase}${changeLabel(changes?.[p.name])}`).join('; ') + '.';
+  }
+  if (playing && !heldBack && updatedAt) s += ` Плейлист обновлён ${dayTime(updatedAt)}.`;
+  return s;
+}
+
+// Предупреждения идут в начало строки: узкая колонка в Airtable показывает только его.
+const withNotes = (notes, rest) => [...notes.map(n => `⚠ ${n}.`), rest].join(' ');
+
+// Ошибка в самой базе, а не сбой связи или программы: куратору она показывается
+// своими словами, без «Завхоз не смог проверить базу».
+class BaseProblem extends Error {}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Главный сценарий
@@ -876,7 +965,9 @@ async function main() {
     ? { playlists: [{ name: 'Локальный манифест', tableId: null }], warnings: [] }
     : await getActivePlaylists(config);
 
-  if (!active.playlists.length) throw new Error('В таблице Info нет активных плейлистов');
+  if (!active.playlists.length) {
+    throw new BaseProblem('В таблице Info нет ни одного активного плейлиста (или их названия не совпадают с названиями таблиц), плеер играет прежний список');
+  }
   active.warnings.forEach(w => warnings.push(w));
 
   log(`Активных плейлистов: ${active.playlists.length} — ${active.playlists.map(p => p.name).join(', ')}`);
@@ -890,6 +981,9 @@ async function main() {
     if (!Array.isArray(manifest.tracks)) throw new Error(`В манифесте «${p.name}» нет списка треков`);
     log(`  «${p.name}»: треков ${manifest.tracks.length}`);
     (manifest.warnings || []).forEach(w => warnings.push(`сервер, «${p.name}»: ${w}`));
+
+    // Сколько записей отдала база, до отсева: это «из N» в статусе.
+    const inBase = manifest.tracks.length;
 
     // Имя станет путём на диске, поэтому проверяем его.
     manifest.tracks = manifest.tracks.filter(t => {
@@ -906,7 +1000,7 @@ async function main() {
       }
       return true;
     });
-    loaded.push({ name: p.name, tableId: p.tableId, manifest });
+    loaded.push({ name: p.name, tableId: p.tableId, manifest, inBase });
   }
 
   setMirrors(loaded.flatMap(l => Array.isArray(l.manifest.mirrors) ? l.manifest.mirrors : []));
@@ -943,7 +1037,7 @@ async function main() {
   const missing = [...wanted.values()].filter(t => !onDisk.has(diskKey(t.fileName)));
   log(`На диске: ${onDisk.size}. Не хватает: ${missing.length}.`);
 
-  const stats = { downloaded: 0, failed: 0, viaFallback: 0, stoppedForSpace: false };
+  const stats = { downloaded: 0, failed: 0, notDownloaded: 0, gone: 0, viaFallback: 0, stoppedForSpace: false };
 
   const freeAtStart = freeSpaceBytes(MUSIC_DIR);
   log(freeAtStart === null
@@ -999,6 +1093,8 @@ async function main() {
     }
 
     stats.failed = queue.length + gone.size;
+    stats.notDownloaded = queue.length;
+    stats.gone = gone.size;
   }
 
   // В dry-run считаем недостающие треки скачанными: показываем план, каким он
@@ -1045,10 +1141,14 @@ async function main() {
   // проходе не должен оставить плеер без музыки.
   let playlistWritten = false;
   const heldBack = whyKeepOldPlaylist(loaded[0].manifest, playlists[0], available, gone);
+  const prevState = readJson(STATE_FILE) || {};
+  const prevFile = readJson(PLAYLIST_FILE);
+  let changes = prevState.changes || null;
 
   if (heldBack) {
     log(`⚠ playlist.json не заменён: ${heldBack}. Повторю в следующий проход.`);
   } else if (playlistChanged(playlist)) {
+    changes = describeChanges(prevFile, playlist);
     writeJsonAtomic(PLAYLIST_FILE, playlist);
     playlistWritten = true;
     log('playlist.json обновлён.');
@@ -1057,19 +1157,49 @@ async function main() {
   }
 
   const lastCheckAt = new Date().toISOString();
-  const lastWorkAt = stats.downloaded > 0 || playlistWritten ? lastCheckAt : previousWorkAt();
+  const lastWorkAt = stats.downloaded > 0 || playlistWritten ? lastCheckAt : prevState.lastWorkAt || null;
+  const onPlayerFile = playlistWritten ? playlist : prevFile;
 
-  const problems = [];
-  if (stats.stoppedForSpace) problems.push('кончилось место');
-  if (stats.failed > 0) problems.push(`не скачано ${stats.failed}`);
-  if (heldBack) problems.push(`плейлист не обновлён: ${heldBack}`);
-  const problem = problems.join(', ');
-  log(`Статус: ${statusLine(lastCheckAt, problem, lastWorkAt)}`);
+  // Скачано из записей каждого плейлиста. Записи без расписания тоже на плеере,
+  // но не играют: о них отдельное предупреждение.
+  const counts = loaded.map(({ name, manifest, inBase }) => ({
+    name,
+    inBase,
+    onPlayer: manifest.tracks.filter(t => available.has(diskKey(t.fileName))).length,
+  }));
+  const scheduled = recordIdsOf(playlists[0]);
+  const unscheduled = loaded[0].manifest.tracks
+    .filter(t => available.has(diskKey(t.fileName)) && !scheduled.has(t.recordId)).length;
+  const skipped = loaded.reduce((s, l) => s + l.inBase - l.manifest.tracks.length, 0);
+
+  const notes = [];
+  if (stats.stoppedForSpace) notes.push('Кончилось место на пирожке, часть треков не скачана');
+  if (heldBack) {
+    // Пустой список в базе — почти всегда снятый Playing, называем это прямо.
+    notes.push(`Новый список не поставлен: ${counts[0].inBase === 0
+      ? `в базе у ${counts[0].name} нет ни одного трека со статусом Playing`
+      : heldBack}`);
+  }
+  if (stats.notDownloaded) {
+    notes.push(`Не ${plural(stats.notDownloaded, ['скачан', 'скачано', 'скачано'])} ${tracksWord(stats.notDownloaded)}, Завхоз попробует снова при следующей проверке`);
+  }
+  if (stats.gone) notes.push(`Нет ни на одном хостинге: ${tracksWord(stats.gone)}, проверьте Full link`);
+  if (skipped) notes.push(`${plural(skipped, ['Пропущена', 'Пропущены', 'Пропущено'])} ${skipped} ${plural(skipped, ['запись', 'записи', 'записей'])}: неправильное имя файла`);
+  if (unscheduled) notes.push(`Без расписания: ${tracksWord(unscheduled)}, на плеере есть, но не играют ни в один день`);
+
+  const summary = playlistSummary(counts, onPlayerFile?.activePlaylist || null, changes, onPlayerFile?.generatedAt, !!heldBack);
+  const status = withNotes(notes, `${summary} Завхоз проверил базу ${dayTime(lastCheckAt)}, следующая проверка ${nextCheckWindow(lastCheckAt)}.`);
+  log(`Статус: ${status}`);
 
   writeJsonAtomic(STATE_FILE, {
-    status: statusLine(lastCheckAt, problem, lastWorkAt),
+    status,
+    summary,
+    changes,
     lastCheckAt,
-    lastCheckOk: !problem,
+    lastGoodCheckAt: lastCheckAt,
+    // Проход удался, если всё скачано и плейлист поставлен. Записи без расписания
+    // или с плохим именем — вопрос к базе, а не сбой Завхоза.
+    lastCheckOk: !(stats.stoppedForSpace || stats.failed > 0 || heldBack),
     lastWorkAt,
     activePlaylist: playlist.activePlaylist,
     playlistsActive: playlists.length,
@@ -1097,17 +1227,26 @@ if (!DRY_RUN) {
   }
   process.on('exit', releaseLock);
 }
-function reportCrash(message) {
-  log(`✗ Завхоз упал: ${message}`);
+function reportCrash(message, baseProblem = false) {
+  log(baseProblem ? `⚠ ${message}. Ничего не меняю.` : `✗ Завхоз упал: ${message}`);
   if (DRY_RUN) return;
   try {
+    // Что на плеере, мы в этом проходе не узнали: берём из прошлой проверки.
+    const prev = readJson(STATE_FILE) || {};
     const lastCheckAt = new Date().toISOString();
-    const lastWorkAt = previousWorkAt();
+    const next = nextCheckWindow(lastCheckAt);
+    const rest = [
+      prev.summary ? `Данные прошлой проверки: ${prev.summary}` : '',
+      prev.lastGoodCheckAt
+        ? `Прошлая проверка ${dayTime(prev.lastGoodCheckAt)}, следующая проверка ${next}.`
+        : `Следующая проверка ${next}.`,
+    ].filter(Boolean).join(' ');
+    const text = String(message).replace(/\.+$/, '');
     writeJsonAtomic(STATE_FILE, {
-      status: statusLine(lastCheckAt, message, lastWorkAt),
+      ...prev,
+      status: withNotes([baseProblem ? text : `Завхоз не смог проверить базу: ${text}`], rest),
       lastCheckAt,
       lastCheckOk: false,
-      lastWorkAt,
       error: message,
     });
   } catch {}
@@ -1129,6 +1268,6 @@ process.on('SIGTERM', () => process.exit(143));
 main()
   .then(s => log(`── Готово. Скачано ${s.downloaded}, ошибок ${s.failed}, через зеркало ${s.viaFallback}. ──`))
   .catch(err => {
-    reportCrash(err.message);
+    reportCrash(err.message, err instanceof BaseProblem);
     process.exit(1);
   });
