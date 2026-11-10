@@ -56,6 +56,7 @@ const configDaySchedule = playerConfig.daySchedule;
 var usingPlaylistFile = false;
 var recordIds = {};            // путь к файлу -> id записи в Airtable
 var waitingForMusic = false;
+var playlistFileVersion = null; // время изменения playlist.json, когда плеер его читал
 const dislikedTracks = new Set(); // чтобы дизлайкнутое не вернулось, пока Завхоз не обновил файл
 
 var options = {
@@ -146,6 +147,10 @@ server.on('error', (err) => {
 // getActiveSession, getCurrentPlaylistConfig и остальные помощники.
 // Нет рабочего файла — возвращаем то, что записано в конфиге.
 function loadPlaylistSource(now) {
+  // Запоминаем до чтения: если Завхоз подменит файл прямо сейчас, время уже
+  // не совпадёт, и после трека плеер перечитает ещё раз. Лишнее перемешивание
+  // лучше, чем пропущенный новый файл.
+  playlistFileVersion = playlistSource.getFileVersion();
   const fromFile = playlistSource.getPlaylists(now);
   const schedule = fromFile && playlistSource.getDaySchedule();
 
@@ -375,7 +380,32 @@ function playSong () {
   });
 }
 
+// Завхоз записал новый playlist.json — перечитываем после этого трека, не
+// дожидаясь начала следующей сессии. Перечитывание то же, что в начале сессии:
+// день недели, интервал и конец сессии плеер снова берёт по часам.
+// Возвращает true, если воспроизведение дальше пошло из перечитанного файла.
+function rereadIfPlaylistChanged() {
+  const version = playlistSource.getFileVersion();
+  // Файл пропал — играем дальше прочитанное, в начале сессии разберёмся.
+  if (version === null || version === playlistFileVersion) return false;
+
+  const now = new Date();
+  if (!playlistSource.getPlaylists(now) || !playlistSource.getDaySchedule()) {
+    // Новый файл не годится. Посреди сессии на txt не уходим: играем то, что
+    // уже прочитали. Время запоминаем, чтобы не предупреждать после каждого трека.
+    playlistFileVersion = version;
+    warn('playlist.json изменился, но в нём нет рабочего расписания — играю прежний список.');
+    return false;
+  }
+
+  log(`playlist.json изменился (записан ${timestamp(new Date(version))}) — перечитываю после трека.`);
+  checkingOnReboot();
+  return true;
+}
+
 function loadNextTrack() {
+  if (rereadIfPlaylistChanged()) return;
+
   // ── Режим расписания: проверка окончания сессии ──
   // Сравниваем текущее время с моментом остановки, зафиксированным на
   // старте (sessionStopDate). Корректно и для стопа после полуночи.

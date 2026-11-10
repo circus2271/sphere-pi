@@ -150,6 +150,7 @@ test('playlist.json: tracks and windows come from the file', { skip: !expressAva
   }
   assert.ok(r.plays.every((p) => !p.track.startsWith('old')), 'старые треки из txt не играют');
   assert.match(r.plays[0].window, /^P 00:00-09:50$/);
+  assert.doesNotMatch(r.out, /playlist\.json изменился/, 'файл не менялся — не перечитывал');
 });
 
 test('at midnight the player takes the new day, even if its list is shorter', { skip: !expressAvailable }, async () => {
@@ -270,12 +271,13 @@ test('mp3 files gone from the disk are skipped; if all are gone, the old way', {
   assert.ok(b.plays.length > 3 && b.plays.every((p) => p.track.startsWith('old-')));
 });
 
-test('the file appears while playing from txt: picked up at midnight; gone: back to txt at the next', { skip: !expressAvailable }, async () => {
+test('the file appears while playing from txt: picked up after the track; gone: back to txt at the next session', { skip: !expressAvailable }, async () => {
   const app = makeApp();
   let wrote = false;
   let removed = false;
   const r = await run(app, {
-    start: '2026-10-30T22:00:00+03:00', speed: 3600, realMs: 60000,
+    // a track lasts 2 real seconds, midnight comes after 15
+    start: '2026-10-30T23:30:00+03:00', speed: 120, trackSeconds: 240, realMs: 40000,
     onLine(line, child) {
       if (!wrote && line.includes('▶')) {
         wrote = true;
@@ -291,13 +293,65 @@ test('the file appears while playing from txt: picked up at midnight; gone: back
   cleanUp(app);
 
   assert.ok(!crashed(r), r.out);
-  const before = r.plays.filter((p) => p.date === '2026-10-30');
-  assert.ok(before.every((p) => p.track.startsWith('old-')));
+  assert.ok(r.plays[0].track.startsWith('old-'));
   const firstNew = r.plays.findIndex((p) => p.track === 'new.mp3');
-  assert.ok(firstNew > 0);
-  assert.equal(r.plays[firstNew].date, '2026-10-31');
+  assert.ok(firstNew >= 1 && firstNew <= 2, `новый файл с ${firstNew}-го трека:\n${r.out.slice(0, 3000)}`);
+  assert.equal(r.plays[firstNew].date, '2026-10-30', 'подхвачен в тот же вечер, не в полночь');
+  assert.ok(r.plays.filter((p) => p.date === '2026-10-30').slice(firstNew).every((p) => p.track === 'new.mp3'),
+    'пропавший файл до конца сессии не трогает музыку');
   assert.ok(r.plays[r.plays.length - 1].track.startsWith('old-'), 'вернулся к txt');
+  assert.equal(r.plays[r.plays.length - 1].date, '2026-10-31');
   assert.match(r.out, /возвращаюсь к _playerConfig/);
+});
+
+test('a new playlist.json mid-session plays from the next track, and the days still rule', { skip: !expressAvailable }, async () => {
+  const app = makeApp({
+    playlist: { friday: [['00:00', '24:00', ['a.mp3']]], saturday: [['00:00', '24:00', ['a.mp3']]] },
+  });
+  let wrote = false;
+  const r = await run(app, {
+    start: '2026-10-30T23:40:00+03:00', speed: 120, trackSeconds: 240, realMs: 20000,
+    onLine(line) {
+      if (!wrote && line.includes('▶')) {
+        wrote = true;
+        writePlaylist(app.dir, {
+          friday: [['00:00', '24:00', ['b.mp3']]],
+          saturday: [['00:00', '24:00', ['s.mp3']]],
+        }, app.addMusic);
+      }
+    },
+  });
+  cleanUp(app);
+
+  assert.ok(!crashed(r), r.out);
+  assert.equal(r.plays[0].track, 'a.mp3');
+  const firstNew = r.plays.findIndex((p) => p.track !== 'a.mp3');
+  assert.ok(firstNew >= 1 && firstNew <= 2, `новый файл с ${firstNew}-го трека:\n${r.out.slice(0, 3000)}`);
+  const fri = r.plays.filter((p) => p.date === '2026-10-30').slice(firstNew);
+  const sat = r.plays.filter((p) => p.date === '2026-10-31');
+  assert.ok(fri.length > 0 && fri.every((p) => p.track === 'b.mp3'), 'пятница из нового файла');
+  assert.ok(sat.length > 3 && sat.every((p) => p.track === 's.mp3'), 'в полночь суббота из нового файла');
+  assert.equal((r.out.match(/playlist\.json изменился/g) || []).length, 1, 'перечитал один раз, без повторов');
+});
+
+test('a broken playlist.json mid-session: the player keeps its list, warns once, no txt', { skip: !expressAvailable }, async () => {
+  const app = makeApp({ playlist: sameEveryDay([['00:00', '24:00', ['a.mp3']]]) });
+  let broke = false;
+  const r = await run(app, {
+    start: '2026-10-30T10:00:00+03:00', speed: 120, trackSeconds: 240, realMs: 10000,
+    onLine(line) {
+      if (!broke && line.includes('▶')) {
+        broke = true;
+        fs.writeFileSync(path.join(app.dir, 'playlist.json'), '{"playlists":[{"na');
+      }
+    },
+  });
+  cleanUp(app);
+
+  assert.ok(!crashed(r), r.out);
+  assert.ok(r.plays.length > 3);
+  assert.ok(r.plays.every((p) => p.track === 'a.mp3'), 'играет прочитанный список, не txt');
+  assert.equal((r.out.match(/нет рабочего расписания/g) || []).length, 1, 'предупредил один раз');
 });
 
 test('stats carry the record id, the file\'s table and the Завхоз status; likes do not carry the status', { skip: !expressAvailable }, async () => {

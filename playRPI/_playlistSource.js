@@ -7,6 +7,7 @@
  * Что отдаёт:
  *   getDaySchedule() — расписание на все семь дней, числами дней, как у плеера
  *   getPlaylists()   — плейлисты на нужный день: окно времени плюс список треков
+ *   getFileVersion() — время изменения playlist.json: плеер смотрит его между треками
  *   getZavhozStatus() — строка статуса Завхоза для статистики
  *
  * Если playlist.json нет, он битый, в нём нет музыки ни на один день или
@@ -211,6 +212,20 @@ function getPlaylists(now = new Date()) {
   };
 }
 
+// Время последнего изменения playlist.json в миллисекундах, null — файла нет.
+// Сам файл не открывается, поэтому смотреть можно после каждого трека.
+// Завхоз переписывает файл, только когда что-то изменилось, и подменяет его
+// целиком, поэтому другое время значит другое содержимое. Сравнивать надо на
+// «не равно», а не на «новее»: у пирожка нет часов на батарейке, после
+// включения без сети время может оказаться в прошлом.
+function getFileVersion() {
+  try {
+    return fs.statSync(PLAYLIST_FILE).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 // Строка вроде «проверка 30.10 23:18 ок; работа 30.10 21:26»: так из Airtable
 // видно, что Завхоз на этом устройстве жив. Нет файла — нет и поля.
 function getZavhozStatus() {
@@ -221,4 +236,4 @@ function getZavhozStatus() {
   }
 }
 
-module.exports = { getDaySchedule, getPlaylists, getZavhozStatus, PLAYLIST_FILE };
+module.exports = { getDaySchedule, getPlaylists, getFileVersion, getZavhozStatus, PLAYLIST_FILE };
