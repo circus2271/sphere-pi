@@ -885,6 +885,7 @@ function scheduleOf(p) {
 // Что поменялось в каждом плейлисте нового файла по сравнению с прежним.
 function describeChanges(prevFile, next) {
   const changes = {};
+  const prevActive = prevFile?.activePlaylist || null;
   for (const p of next.playlists) {
     const old = Array.isArray(prevFile?.playlists) ? prevFile.playlists.find(x => x.name === p.name) : null;
     if (!old) {
@@ -896,6 +897,8 @@ function describeChanges(prevFile, next) {
       added: [...now].filter(id => !was.has(id)).length,
       removed: [...was].filter(id => !now.has(id)).length,
       scheduleChanged: scheduleOf(old) !== scheduleOf(p),
+      // Куратор поднял в Info другой плейлист: состав мог не поменяться, а играть стал он.
+      switchedFrom: p.name === next.activePlaylist && prevActive && prevActive !== p.name ? prevActive : null,
     };
   }
   return changes;
@@ -905,10 +908,11 @@ function changeLabel(c) {
   if (!c) return '';
   if (c.isNew) return ' (новый)';
   const parts = [];
-  if (c.added) parts.push(`+${c.added}`);
-  if (c.removed) parts.push(`−${c.removed}`);
-  if (parts.length) return ` (${parts.join(' ')})`;
-  return c.scheduleChanged ? ' (изменено расписание)' : ' (без изменений)';
+  if (c.switchedFrom) parts.push(`переключён с ${c.switchedFrom}`);
+  const counts = [c.added ? `+${c.added}` : '', c.removed ? `−${c.removed}` : ''].filter(Boolean).join(' ');
+  if (counts) parts.push(counts);
+  else if (c.scheduleChanged) parts.push('изменено расписание');
+  return ` (${parts.length ? parts.join('; ') : 'без изменений'})`;
 }
 
 // Всё, кроме предупреждений и строки о проверке: что играет и когда обновлён.
