@@ -188,6 +188,27 @@ test('the schedule rules even with mode24h: true; the player waits and comes bac
   }
 });
 
+test('while silent, the player reads the file every minute: an earlier start written at night is kept', { skip: !expressAvailable }, async () => {
+  const app = makeApp({ playlist: sameEveryDay([['10:00', '22:00', ['bar.mp3']]]) });
+  let wrote = false;
+  const r = await run(app, {
+    // a fake minute is 0.1 real second; 08:00 → 09:30 takes 9 seconds
+    start: '2026-10-30T08:00:00+03:00', speed: 600, trackSeconds: 240, realMs: 9000,
+    onLine(line) {
+      if (!wrote && line.includes('музыки нет')) {
+        wrote = true; // Завхоз ночью переписал файл: бар открывается на час раньше
+        writePlaylist(app.dir, sameEveryDay([['09:00', '22:00', ['bar.mp3']]]), app.addMusic);
+      }
+    },
+  });
+  cleanUp(app);
+
+  assert.ok(!crashed(r), r.out);
+  assert.ok(wrote && r.plays.length > 0, r.out.slice(0, 2000));
+  assert.equal(r.plays[0].hour, 9, 'заиграл по новому расписанию, а не в 10:00');
+  assert.ok(r.plays[0].minute <= 1, `в течение минуты после 09:00, а не в ${r.plays[0].hour}:${r.plays[0].minute}`);
+});
+
 test('started after midnight inside a night interval: yesterday\'s tracks, until its end', { skip: !expressAvailable }, async () => {
   const app = makeApp({
     playlist: {
