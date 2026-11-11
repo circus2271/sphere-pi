@@ -835,12 +835,9 @@ function playlistChanged(next) {
 // «Zavhoz status» таблицы Timestamps, поэтому из Airtable видно, что на пирожке,
 // без входа на устройство. Строку собирает шаблон, слова в нём всегда одни и те же:
 //
-//   [⚠ предупреждения.] Играет {плейлист}, {скачано} из {в базе} на плеере ({изменение}).
-//   Альтернативный плейлист — {плейлист}, {скачано} из {в базе} ({изменение}).
+//   [⚠ предупреждения.] {плейлист} ({скачано} из {в базе}).
+//   Альтернативные: {плейлист} ({скачано} из {в базе}), …
 //   Плейлист обновлён {дата}. Завхоз проверил базу {дата}, следующая проверка {дата}.
-//
-// «Изменение» — что поменялось на плеере при последней записи playlist.json,
-// оно держится до следующей записи, как и дата «Плейлист обновлён».
 // ─────────────────────────────────────────────────────────────────────────────
 const pad2 = n => String(n).padStart(2, '0');
 const dayOf = d => `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}`;
@@ -872,66 +869,21 @@ function readJson(file) {
   }
 }
 
-// Записи плейлиста из playlist.json и его расписание без имён файлов: если
-// поменялось только имя файла, для куратора это «без изменений».
+// Записи плейлиста из playlist.json.
 function recordIdsOf(p) {
   return new Set(DAYS.flatMap(d => (p.days?.[d]?.intervals || []).flatMap(i => i.tracks.map(t => t.recordId))));
 }
-function scheduleOf(p) {
-  return JSON.stringify(DAYS.map(d => (p.days?.[d]?.intervals || [])
-    .map(i => `${i.start}-${i.end}:${i.tracks.map(t => t.recordId).sort().join(',')}`)));
-}
 
-// Что поменялось в каждом плейлисте нового файла по сравнению с прежним.
-function describeChanges(prevFile, next) {
-  const changes = {};
-  const prevActive = prevFile?.activePlaylist || null;
-  for (const p of next.playlists) {
-    const old = Array.isArray(prevFile?.playlists) ? prevFile.playlists.find(x => x.name === p.name) : null;
-    if (!old) {
-      changes[p.name] = { isNew: true };
-      continue;
-    }
-    const was = recordIdsOf(old), now = recordIdsOf(p);
-    changes[p.name] = {
-      added: [...now].filter(id => !was.has(id)).length,
-      removed: [...was].filter(id => !now.has(id)).length,
-      scheduleChanged: scheduleOf(old) !== scheduleOf(p),
-      // Куратор поднял в Info другой плейлист: состав мог не поменяться, а играть стал он.
-      switchedFrom: p.name === next.activePlaylist && prevActive && prevActive !== p.name ? prevActive : null,
-    };
-  }
-  return changes;
-}
-
-function changeLabel(c) {
-  if (!c) return '';
-  if (c.isNew) return ' (новый)';
-  const parts = [];
-  if (c.switchedFrom) parts.push(`переключён с ${c.switchedFrom}`);
-  const counts = [c.added ? `+${c.added}` : '', c.removed ? `−${c.removed}` : ''].filter(Boolean).join(' ');
-  if (counts) parts.push(counts);
-  else if (c.scheduleChanged) parts.push('изменено расписание');
-  return ` (${parts.length ? parts.join('; ') : 'без изменений'})`;
-}
-
-// Всё, кроме предупреждений и строки о проверке: что играет и когда обновлён.
-//   counts  — [{ name, onPlayer, inBase }], первым тот, что должен играть
-//   playing — какой плейлист записан в playlist.json, null — файла нет
-//   heldBack — новый список не поставлен, играет записанный раньше
-function playlistSummary(counts, playing, changes, updatedAt, heldBack) {
+// Плейлисты и дата обновления, без предупреждений и строки о проверке.
+//   counts    — [{ name, onPlayer, inBase }], первым тот, что стоит первым в Info
+//   updatedAt — когда записан playlist.json, null — файла нет
+// Что играет прямо сейчас, видно в колонке Playlist name, здесь это не повторяем.
+function playlistSummary(counts, updatedAt) {
   const [first, ...others] = counts;
-  const ofFirst = `${first.onPlayer} из ${first.inBase} на плеере`;
-  let s;
-  if (!playing) s = `Играет старый список из txt. В базе ${first.name}: ${ofFirst}.`;
-  else if (heldBack) s = `Играет прежний список ${playing}${updatedAt ? ` от ${dayTime(updatedAt)}` : ''}. В базе ${first.name}: ${ofFirst}.`;
-  else s = `Играет ${first.name}, ${ofFirst}${changeLabel(changes?.[first.name])}.`;
-
-  if (others.length) {
-    s += ` ${others.length > 1 ? 'Альтернативные плейлисты' : 'Альтернативный плейлист'} — `
-      + others.map(p => `${p.name}, ${p.onPlayer} из ${p.inBase}${changeLabel(changes?.[p.name])}`).join('; ') + '.';
-  }
-  if (playing && !heldBack && updatedAt) s += ` Плейлист обновлён ${dayTime(updatedAt)}.`;
+  const of = p => `${p.name} (${p.onPlayer} из ${p.inBase})`;
+  let s = `${of(first)}.`;
+  if (others.length) s += ` ${others.length > 1 ? 'Альтернативные' : 'Альтернативный'}: ${others.map(of).join(', ')}.`;
+  if (updatedAt) s += ` Плейлист обновлён ${dayTime(updatedAt)}.`;
   return s;
 }
 
@@ -1147,12 +1099,10 @@ async function main() {
   const heldBack = whyKeepOldPlaylist(loaded[0].manifest, playlists[0], available, gone);
   const prevState = readJson(STATE_FILE) || {};
   const prevFile = readJson(PLAYLIST_FILE);
-  let changes = prevState.changes || null;
 
   if (heldBack) {
     log(`⚠ playlist.json не заменён: ${heldBack}. Повторю в следующий проход.`);
   } else if (playlistChanged(playlist)) {
-    changes = describeChanges(prevFile, playlist);
     writeJsonAtomic(PLAYLIST_FILE, playlist);
     playlistWritten = true;
     log('playlist.json обновлён.');
@@ -1180,9 +1130,10 @@ async function main() {
   if (stats.stoppedForSpace) notes.push('Кончилось место на пирожке, часть треков не скачана');
   if (heldBack) {
     // Пустой список в базе — почти всегда снятый Playing, называем это прямо.
+    // «Плейлист обновлён» в строке ниже — дата прежнего списка, который играет.
     notes.push(`Новый список не поставлен: ${counts[0].inBase === 0
       ? `в базе у ${counts[0].name} нет ни одного трека со статусом Playing`
-      : heldBack}`);
+      : heldBack}, ${onPlayerFile ? 'играет прежний' : 'плеер играет старый список из txt'}`);
   }
   if (stats.notDownloaded) {
     notes.push(`Не ${plural(stats.notDownloaded, ['скачан', 'скачано', 'скачано'])} ${tracksWord(stats.notDownloaded)}, Завхоз попробует снова при следующей проверке`);
@@ -1191,14 +1142,13 @@ async function main() {
   if (skipped) notes.push(`${plural(skipped, ['Пропущена', 'Пропущены', 'Пропущено'])} ${skipped} ${plural(skipped, ['запись', 'записи', 'записей'])}: неправильное имя файла`);
   if (unscheduled) notes.push(`Без расписания: ${tracksWord(unscheduled)}, на плеере есть, но не играют ни в один день`);
 
-  const summary = playlistSummary(counts, onPlayerFile?.activePlaylist || null, changes, onPlayerFile?.generatedAt, !!heldBack);
+  const summary = playlistSummary(counts, onPlayerFile?.generatedAt || null);
   const status = withNotes(notes, `${summary} Завхоз проверил базу ${dayTime(lastCheckAt)}, следующая проверка ${nextCheckWindow(lastCheckAt)}.`);
   log(`Статус: ${status}`);
 
   writeJsonAtomic(STATE_FILE, {
     status,
     summary,
-    changes,
     lastCheckAt,
     lastGoodCheckAt: lastCheckAt,
     // Проход удался, если всё скачано и плейлист поставлен. Записи без расписания
